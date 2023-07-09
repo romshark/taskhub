@@ -1,0 +1,192 @@
+scalar Time
+
+type Query {
+  task(id: ID!): Task
+  user(id: ID!): User
+  project(id: ID!): Project
+  tasks(
+    filters: TasksFilters
+    order: TasksOrder
+    orderAsc: Boolean! = true
+    limit: Int = 10
+  ): [Task!]!
+  users(
+    filters: UsersFilters
+    order: UsersOrder
+    orderAsc: Boolean! = true
+    limit: Int = 10
+  ): [User!]!
+  projects(
+    filters: ProjectsFilters
+    order: ProjectsOrder
+    orderAsc: Boolean! = true
+    limit: Int = 10
+  ): [Project!]!
+}
+
+type Mutation {
+  createUser(
+    # displayName must be unique
+    displayName: String!
+    role: String!
+    location: String!
+    manager: ID
+    subordinates: [ID!]
+  ): User!
+
+  updateUser(
+    id: ID!
+    # displayName must be unique
+    displayName: String!
+    role: String!
+    location: String!
+    personalStatus: String
+    manager: ID
+    subordinates: [ID!]
+  ): User!
+
+  createTask(
+    # title must be unique
+    title: String!
+    project: ID!
+    status: TaskStatus! = TODO
+    priority: TaskPriority!
+    description: String
+    due: Time
+    tags: [String!]
+    assignees: [ID!]
+    reporters: [ID!]
+  ): Task!
+
+  updateTask(
+    id: ID!
+    # title must be unique
+    title: String!
+    description: String
+    status: TaskStatus!
+    priority: TaskPriority!
+    due: Time
+    tags: [String!]!
+    project: ID!
+    assignees: [ID!]!
+    reporters: [ID!]!
+    blocks: [ID!]!
+    relatesTo: [ID!]!
+  ): Task!
+
+  createProject(
+    # name must be unique
+    name: String!
+    description: String!
+    # slug must be unique
+    slug: String!
+    owners: [ID!]!
+  ): Project!
+
+  updateProject(
+    id: ID!
+    name: String!
+    description: String!
+    # slug must be unique
+    slug: String!
+    owners: [ID!]!
+  ): Project!
+}
+
+enum TasksOrder {
+  PRIORITY
+  CREATION_TIME
+  DUE_TIME
+  TITLE_ALPHA
+}
+
+input TasksFilters {
+  assignees: [ID!]
+  reporters: [ID!]
+  projects: [ID!]
+  status: [TaskStatus!]
+  tags: [String!]
+  createdBefore: Time
+  createdAfter: Time
+}
+
+input ProjectsFilters {
+  members: [ID!]
+  createdBefore: Time
+  createdAfter: Time
+}
+
+input UsersFilters {
+  name: String!
+  projects: [ID!]
+}
+
+enum UsersOrder {
+  NAME_ALPHA
+}
+
+enum ProjectsOrder {
+  NAME_ALPHA
+  NUM_MEMBERS
+  NUM_TASKS
+}
+
+type Task {
+  id: ID!
+  title: String!
+  description: String
+  priority: TaskPriority!
+  status: TaskStatus!
+  creation: Time!
+  due: Time
+  tags: [String!]!
+
+  project: Project!
+  assignees: [User!]!
+  reporters: [User!]!
+  # isBlockedBy links tasks that are blocking this task
+  isBlockedBy: [Task!]!
+  # blocks links tasks that are blocked by this task
+  blocks: [Task!]!
+  # relatesTo links related tasks
+  relatesTo: [Task!]!
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+type User {
+  id: ID!
+  displayName: String!
+  role: String!
+  location: String!
+  personalStatus: String
+
+  manager: User
+  subordinates: [User!]
+  projects: [Project!]!
+  tasksAssigned: [Task!]!
+  tasksReported: [Task!]!
+}
+
+type Project {
+  id: ID!
+  name: String!
+  description: String!
+  slug: String!
+  tasks: [Task!]!
+  creation: Time!
+
+  owners: [User!]
+  members: [User!]!
+}
+
+enum TaskPriority {
+  BLOCKER
+  HIGH
+  MEDIUM
+  LOW
+}
