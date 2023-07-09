@@ -306,7 +306,7 @@ func (r *mutationResolver) CreateProject(ctx context.Context, name string, descr
 		if u == nil {
 			return nil, fmt.Errorf("owner user %q not found", id)
 		}
-		ownerUsers = append(ownerUsers, u)
+		ownerUsers = slices.AppendUnique(ownerUsers, u)
 	}
 
 	newProject := &model.Project{
@@ -343,7 +343,7 @@ func (r *mutationResolver) UpdateProject(ctx context.Context, id string, name st
 		if u == nil {
 			return nil, fmt.Errorf("owner user %q not found", id)
 		}
-		ownerUsers = append(ownerUsers, u)
+		ownerUsers = slices.AppendUnique(ownerUsers, u)
 	}
 
 	newProject := &model.Project{
@@ -653,8 +653,10 @@ func (r *Resolver) Task() TaskResolver { return &taskResolver{r} }
 // User returns UserResolver implementation.
 func (r *Resolver) User() UserResolver { return &userResolver{r} }
 
-type mutationResolver struct{ *Resolver }
-type projectResolver struct{ *Resolver }
-type queryResolver struct{ *Resolver }
-type taskResolver struct{ *Resolver }
-type userResolver struct{ *Resolver }
+type (
+	mutationResolver struct{ *Resolver }
+	projectResolver  struct{ *Resolver }
+	queryResolver    struct{ *Resolver }
+	taskResolver     struct{ *Resolver }
+	userResolver     struct{ *Resolver }
+)
