@@ -96,6 +96,9 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, displayNam
 		if managerUser == nil {
 			return nil, fmt.Errorf("manager user %q not found", *manager)
 		}
+		if managerUser == user {
+			return nil, errors.New("user references itself as manager")
+		}
 	}
 
 	var subordinateUsers []*model.User
@@ -104,6 +107,10 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, displayNam
 		if u == nil {
 			return nil, fmt.Errorf("subordinate user %q not found", s)
 		}
+		if u == user {
+			return nil, errors.New("user references itself as subordinate")
+		}
+		subordinateUsers = slices.AppendUnique(subordinateUsers, u)
 	}
 
 	user.DisplayName = displayName
@@ -117,7 +124,7 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, displayNam
 }
 
 // CreateTask is the resolver for the createTask field.
-func (r *mutationResolver) CreateTask(ctx context.Context, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string) (*model.Task, error) {
+func (r *mutationResolver) CreateTask(ctx context.Context, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string, blocks []string, relatesTo []string) (*model.Task, error) {
 	for _, t := range r.Resolver.Tasks {
 		if t.Title == title {
 			return nil, errors.New("non-unique title")
@@ -155,6 +162,24 @@ func (r *mutationResolver) CreateTask(ctx context.Context, title string, project
 		usersReporters = slices.AppendUnique(usersReporters, u)
 	}
 
+	var blocksTasks []*model.Task
+	for _, id := range blocks {
+		t := TaskByID(r.Resolver, id)
+		if t == nil {
+			return nil, fmt.Errorf("blocked task %q not found", id)
+		}
+		blocksTasks = slices.AppendUnique(blocksTasks, t)
+	}
+
+	var relatesToTasks []*model.Task
+	for _, id := range relatesTo {
+		t := TaskByID(r.Resolver, id)
+		if t == nil {
+			return nil, fmt.Errorf("related task %q not found", id)
+		}
+		relatesToTasks = slices.AppendUnique(relatesToTasks, t)
+	}
+
 	newTask := &model.Task{
 		ID:          "task_" + MakeID(title),
 		Title:       title,
@@ -167,6 +192,8 @@ func (r *mutationResolver) CreateTask(ctx context.Context, title string, project
 		Project:     assignedProject,
 		Assignees:   usersAssignees,
 		Reporters:   usersReporters,
+		RelatesTo:   relatesToTasks,
+		Blocks:      blocksTasks,
 	}
 	r.Tasks = append(r.Tasks, newTask)
 	return newTask, nil
@@ -228,6 +255,9 @@ func (r *mutationResolver) UpdateTask(ctx context.Context, id string, title stri
 		if t == nil {
 			return nil, fmt.Errorf("blocked task %q not found", id)
 		}
+		if t == task {
+			return nil, errors.New("task references itself as blocker")
+		}
 		blocksTasks = slices.AppendUnique(blocksTasks, t)
 	}
 
@@ -236,6 +266,9 @@ func (r *mutationResolver) UpdateTask(ctx context.Context, id string, title stri
 		t := TaskByID(r.Resolver, id)
 		if t == nil {
 			return nil, fmt.Errorf("related task %q not found", id)
+		}
+		if t == task {
+			return nil, errors.New("task references itself as related")
 		}
 		relatesToTasks = slices.AppendUnique(relatesToTasks, t)
 	}

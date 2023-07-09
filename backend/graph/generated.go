@@ -51,7 +51,7 @@ type DirectiveRoot struct {
 type ComplexityRoot struct {
 	Mutation struct {
 		CreateProject func(childComplexity int, name string, description string, slug string, owners []string) int
-		CreateTask    func(childComplexity int, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string) int
+		CreateTask    func(childComplexity int, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string, blocks []string, relatesTo []string) int
 		CreateUser    func(childComplexity int, displayName string, role string, location string, manager *string, subordinates []string) int
 		UpdateProject func(childComplexity int, id string, name string, description string, slug string, owners []string) int
 		UpdateTask    func(childComplexity int, id string, title string, description *string, status model.TaskStatus, priority model.TaskPriority, due *time.Time, tags []string, project string, assignees []string, reporters []string, blocks []string, relatesTo []string) int
@@ -112,7 +112,7 @@ type ComplexityRoot struct {
 type MutationResolver interface {
 	CreateUser(ctx context.Context, displayName string, role string, location string, manager *string, subordinates []string) (*model.User, error)
 	UpdateUser(ctx context.Context, id string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) (*model.User, error)
-	CreateTask(ctx context.Context, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string) (*model.Task, error)
+	CreateTask(ctx context.Context, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string, blocks []string, relatesTo []string) (*model.Task, error)
 	UpdateTask(ctx context.Context, id string, title string, description *string, status model.TaskStatus, priority model.TaskPriority, due *time.Time, tags []string, project string, assignees []string, reporters []string, blocks []string, relatesTo []string) (*model.Task, error)
 	CreateProject(ctx context.Context, name string, description string, slug string, owners []string) (*model.Project, error)
 	UpdateProject(ctx context.Context, id string, name string, description string, slug string, owners []string) (*model.Project, error)
@@ -178,7 +178,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateTask(childComplexity, args["title"].(string), args["project"].(string), args["status"].(model.TaskStatus), args["priority"].(model.TaskPriority), args["description"].(*string), args["due"].(*time.Time), args["tags"].([]string), args["assignees"].([]string), args["reporters"].([]string)), true
+		return e.complexity.Mutation.CreateTask(childComplexity, args["title"].(string), args["project"].(string), args["status"].(model.TaskStatus), args["priority"].(model.TaskPriority), args["description"].(*string), args["due"].(*time.Time), args["tags"].([]string), args["assignees"].([]string), args["reporters"].([]string), args["blocks"].([]string), args["relatesTo"].([]string)), true
 
 	case "Mutation.createUser":
 		if e.complexity.Mutation.CreateUser == nil {
@@ -777,6 +777,24 @@ func (ec *executionContext) field_Mutation_createTask_args(ctx context.Context, 
 		}
 	}
 	args["reporters"] = arg8
+	var arg9 []string
+	if tmp, ok := rawArgs["blocks"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("blocks"))
+		arg9, err = ec.unmarshalNID2ᚕstringᚄ(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["blocks"] = arg9
+	var arg10 []string
+	if tmp, ok := rawArgs["relatesTo"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("relatesTo"))
+		arg10, err = ec.unmarshalNID2ᚕstringᚄ(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["relatesTo"] = arg10
 	return args, nil
 }
 
@@ -1457,7 +1475,7 @@ func (ec *executionContext) _Mutation_createTask(ctx context.Context, field grap
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().CreateTask(rctx, fc.Args["title"].(string), fc.Args["project"].(string), fc.Args["status"].(model.TaskStatus), fc.Args["priority"].(model.TaskPriority), fc.Args["description"].(*string), fc.Args["due"].(*time.Time), fc.Args["tags"].([]string), fc.Args["assignees"].([]string), fc.Args["reporters"].([]string))
+		return ec.resolvers.Mutation().CreateTask(rctx, fc.Args["title"].(string), fc.Args["project"].(string), fc.Args["status"].(model.TaskStatus), fc.Args["priority"].(model.TaskPriority), fc.Args["description"].(*string), fc.Args["due"].(*time.Time), fc.Args["tags"].([]string), fc.Args["assignees"].([]string), fc.Args["reporters"].([]string), fc.Args["blocks"].([]string), fc.Args["relatesTo"].([]string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
