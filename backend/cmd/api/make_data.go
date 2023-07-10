@@ -52,7 +52,7 @@ func makeData(r *graph.Resolver) {
 		Role:        "Site-Reliability Engineer",
 		Location:    "Munich, Germany",
 	}
-	usersDTA_Oleksiy := &model.User{
+	usersDTA_OleksiyGavrilyuk := &model.User{
 		DisplayName: "Oleksiy Gavrilyuk",
 		Role:        "Data Analyst",
 		Location:    "Munich",
@@ -126,7 +126,7 @@ func makeData(r *graph.Resolver) {
 		userSWEFR_AlmaWarner,
 		userSWEBE_DanielLowitz,
 		userSRE_IvoGarrette,
-		usersDTA_Oleksiy,
+		usersDTA_OleksiyGavrilyuk,
 		usersUXD_EstefaniaPerez,
 		userPM_AnneWilliams,
 		userPM_JamesHunter,
@@ -168,7 +168,7 @@ func makeData(r *graph.Resolver) {
 	userSWEFR_AlmaWarner.Manager = userPM_JamesHunter
 	userSWEBE_DanielLowitz.Manager = userPM_JamesHunter
 	userSRE_IvoGarrette.Manager = userPM_JamesHunter
-	usersDTA_Oleksiy.Manager = userPM_JamesHunter
+	usersDTA_OleksiyGavrilyuk.Manager = userPM_JamesHunter
 	usersUXD_EstefaniaPerez.Manager = userPM_JamesHunter
 
 	userPM_AnneWilliams.Manager = userCTO_MarcCarlson
@@ -328,6 +328,86 @@ func makeData(r *graph.Resolver) {
 		Assignees:   []*model.User{userOPS_NikitaMykalay},
 		Reporters:   []*model.User{userOPS_NikitaMykalay},
 	}
+	task8 := &model.Task{
+		Title:       "Refactor contract API",
+		Description: nil,
+		Status:      model.TaskStatusInProgress,
+		Creation:    time.Now().Add(-(time.Minute * 30)),
+		Due:         nil,
+		Tags:        nil,
+		Project:     projectCoreMigration,
+		Assignees:   []*model.User{userSWEBE_RyanLindsey},
+		Reporters:   []*model.User{userSWEBE_RyanLindsey},
+	}
+	task9 := &model.Task{
+		Title:       "Configure data source",
+		Description: ptr(`AT: x664; XT: 1024`),
+		Status:      model.TaskStatusTodo,
+		Creation:    time.Now().Add(-(time.Hour * 24 * 2)),
+		Due:         ptr(time.Now().AddDate(0, 0, 2)),
+		Tags:        nil,
+		Project:     projectPlatformUpgrade,
+		Assignees:   []*model.User{usersDTA_OleksiyGavrilyuk},
+		Reporters:   []*model.User{userPM_JamesHunter},
+	}
+	task10 := &model.Task{
+		Title:       "Use new data source",
+		Description: nil,
+		Status:      model.TaskStatusTodo,
+		Creation:    time.Now().Add(-(time.Hour*24*2 + time.Minute*2)),
+		Due:         ptr(time.Now().AddDate(0, 0, 3)),
+		Tags:        nil,
+		Project:     projectPlatformUpgrade,
+		Assignees:   []*model.User{usersDTA_OleksiyGavrilyuk},
+		Reporters:   []*model.User{userPM_JamesHunter},
+	}
+	task11 := &model.Task{
+		Title: "Analyze Sales Performance by Region",
+		Description: ptr(`Analyze sales performance by region to gain actionable ` +
+			`insights for improving revenue generation. You will be responsible ` +
+			`for collecting, cleaning, and analyzing sales data from various sources` +
+			`, including CRM systems and transaction databases. By utilizing ` +
+			`statistical methods and data visualization techniques, you will identify ` +
+			`trends, patterns, and anomalies in sales metrics such as revenue, ` +
+			`units sold, and average order value across different regions.` +
+			` Your analysis will involve identifying top-performing regions, ` +
+			`evaluating the effectiveness of sales strategies in each region, ` +
+			`and identifying any underperforming areas that require attention. ` +
+			`Additionally, you will collaborate with the sales team to understand ` +
+			`their challenges and gather additional context for the data. ` +
+			`Based on your findings, you will provide recommendations on areas ` +
+			`for improvement, such as targeting specific customer segments, ` +
+			`optimizing pricing strategies, or refining sales territories. ` +
+			`Your insights will help the company make informed decisions to ` +
+			`increase sales performance, drive growth, and maximize profitability ` +
+			`in different regions.`),
+		Status:    model.TaskStatusInProgress,
+		Creation:  time.Now().Add(-(time.Hour * 24 * 10)),
+		Due:       ptr(time.Now().AddDate(0, 0, 20)),
+		Tags:      []string{"sales", "performance"},
+		Project:   projectVendorPlatform,
+		Assignees: []*model.User{userBI_RonanMirella},
+		Reporters: []*model.User{userCOO_BrittanyEmile},
+	}
+	task12 := &model.Task{
+		Title: "Revisit Employee Onboarding System",
+		Description: ptr(`Assess and select an appropriate onboarding software ` +
+			`or platform that meets the company's technical requirements and ` +
+			`security standards. Leverage marketing strategies to enhance the ` +
+			`onboarding experience and create a positive impression of the ` +
+			`company culture.`),
+		Status:   model.TaskStatusInProgress,
+		Creation: time.Now().Add(-(time.Hour*24*6 + time.Minute*24)),
+		Due:      ptr(time.Now().AddDate(0, 0, 1).Add(time.Hour * 2)),
+		Tags:     nil,
+		Project:  projectPlatformUpgrade,
+		Assignees: []*model.User{
+			userMAR_AshleyRice,
+			userCTO_MarcCarlson,
+			userHR_AdrienneClement,
+		},
+		Reporters: []*model.User{userCFO_TabbyWalters, userCEO_CedricMaude},
+	}
 
 	r.Tasks = []*model.Task{
 		task1,
@@ -337,7 +417,16 @@ func makeData(r *graph.Resolver) {
 		task5,
 		task6,
 		task7,
+		task8,
+		task9,
+		task10,
+		task11,
+		task12,
 	}
+
+	task9.Blocks = []*model.Task{task10}
+	task10.Blocks = []*model.Task{task11}
+	task5.RelatesTo = []*model.Task{task6, task3}
 
 	for i, t := range r.Tasks {
 		// Set task IDs
