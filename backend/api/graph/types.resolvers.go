@@ -46,8 +46,8 @@ func (r *taskResolver) IsBlockedBy(ctx context.Context, obj *model.Task) ([]*mod
 		if t == obj {
 			continue
 		}
-		for _, t := range t.Blocks {
-			if t == obj {
+		for _, tb := range t.Blocks {
+			if tb == obj {
 				blockedBy = slices.AppendUnique(blockedBy, t)
 			}
 		}
@@ -65,7 +65,7 @@ func (r *taskResolver) RelatesTo(ctx context.Context, obj *model.Task) ([]*model
 		}
 		for _, tr := range t.RelatesTo {
 			if tr == obj {
-				relatesTo = slices.AppendUnique(relatesTo, tr)
+				relatesTo = slices.AppendUnique(relatesTo, t)
 			}
 		}
 	}
