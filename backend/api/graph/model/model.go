@@ -4,12 +4,15 @@ import "time"
 
 type User struct {
 	ID             string  `json:"id"`
+	Email          string  `json:"email"`
 	DisplayName    string  `json:"displayName"`
 	Role           string  `json:"role"`
 	Location       string  `json:"location"`
 	PersonalStatus string  `json:"personalStatus"`
 	Manager        *User   `json:"manager,omitempty"`
 	Subordinates   []*User `json:"subordinates,omitempty"`
+
+	PasswordHash string
 }
 
 type Project struct {

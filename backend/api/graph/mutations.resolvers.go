@@ -10,16 +10,26 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/romshark/taskhub/graph/model"
+	"github.com/romshark/taskhub/api/graph/auth"
+	"github.com/romshark/taskhub/api/graph/model"
 	"github.com/romshark/taskhub/slices"
 )
 
 // CreateUser is the resolver for the createUser field.
-func (r *mutationResolver) CreateUser(ctx context.Context, displayName string, role string, location string, manager *string, subordinates []string) (*model.User, error) {
+func (r *mutationResolver) CreateUser(ctx context.Context, email string, password string, displayName string, role string, location string, manager *string, subordinates []string) (*model.User, error) {
 	for _, u := range r.Resolver.Users {
 		if u.DisplayName == displayName {
 			return nil, errors.New("non-unique displayName")
 		}
+		if u.Email == email {
+			return nil, errors.New("non-unique email")
+		}
+	}
+	if err := ValidateEmailAddress(email); err != nil {
+		return nil, err
+	}
+	if err := ValidateUserPassword(password); err != nil {
+		return nil, err
 	}
 	if err := ValidateUserDisplayName(displayName); err != nil {
 		return nil, err
@@ -47,29 +57,50 @@ func (r *mutationResolver) CreateUser(ctx context.Context, displayName string, r
 		}
 	}
 
+	passwordHash, err := r.Resolver.PasswordHasher.HashPassword([]byte(password))
+	if err != nil {
+		return nil, fmt.Errorf("hashing password: %w", err)
+	}
+
 	newUser := &model.User{
 		ID:           "user_" + MakeID(displayName),
+		Email:        email,
 		DisplayName:  displayName,
 		Role:         role,
 		Location:     location,
 		Manager:      managerUser,
 		Subordinates: subordinateUsers,
+		PasswordHash: passwordHash,
 	}
 	r.Resolver.Users = append(r.Resolver.Users, newUser)
 	return newUser, nil
 }
 
 // UpdateUser is the resolver for the updateUser field.
-func (r *mutationResolver) UpdateUser(ctx context.Context, id string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) (*model.User, error) {
+func (r *mutationResolver) UpdateUser(ctx context.Context, id string, email string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) (*model.User, error) {
+	if err := auth.RequireAuthenticated(ctx); err != nil {
+		return nil, err
+	}
+
 	user := UserByID(r.Resolver, id)
 	if user == nil {
 		return nil, fmt.Errorf("user %q not found", id)
+	}
+
+	if err := auth.RequireOwner(ctx, id); err != nil {
+		return nil, err
 	}
 
 	for _, u := range r.Resolver.Users {
 		if u.DisplayName == displayName {
 			return nil, errors.New("non-unique displayName")
 		}
+		if u.Email == email {
+			return nil, errors.New("non-unique email")
+		}
+	}
+	if err := ValidateEmailAddress(email); err != nil {
+		return nil, err
 	}
 	if err := ValidateUserDisplayName(displayName); err != nil {
 		return nil, err
@@ -113,6 +144,7 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, displayNam
 		subordinateUsers = slices.AppendUnique(subordinateUsers, u)
 	}
 
+	user.Email = email
 	user.DisplayName = displayName
 	user.Role = role
 	user.Location = location
@@ -125,6 +157,10 @@ func (r *mutationResolver) UpdateUser(ctx context.Context, id string, displayNam
 
 // CreateTask is the resolver for the createTask field.
 func (r *mutationResolver) CreateTask(ctx context.Context, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string, blocks []string, relatesTo []string) (*model.Task, error) {
+	if err := auth.RequireAuthenticated(ctx); err != nil {
+		return nil, err
+	}
+
 	for _, t := range r.Resolver.Tasks {
 		if t.Title == title {
 			return nil, errors.New("non-unique title")
@@ -186,7 +222,7 @@ func (r *mutationResolver) CreateTask(ctx context.Context, title string, project
 		Description: description,
 		Priority:    priority,
 		Status:      status,
-		Creation:    time.Now(),
+		Creation:    r.Resolver.TimeProvider.Now(),
 		Due:         due,
 		Tags:        tags,
 		Project:     assignedProject,
@@ -201,6 +237,10 @@ func (r *mutationResolver) CreateTask(ctx context.Context, title string, project
 
 // UpdateTask is the resolver for the updateTask field.
 func (r *mutationResolver) UpdateTask(ctx context.Context, id string, title string, description *string, status model.TaskStatus, priority model.TaskPriority, due *time.Time, tags []string, project string, assignees []string, reporters []string, blocks []string, relatesTo []string) (*model.Task, error) {
+	if err := auth.RequireAuthenticated(ctx); err != nil {
+		return nil, err
+	}
+
 	task := TaskByID(r.Resolver, id)
 	if task == nil {
 		return nil, fmt.Errorf("task %q not found", id)
@@ -290,6 +330,19 @@ func (r *mutationResolver) UpdateTask(ctx context.Context, id string, title stri
 
 // CreateProject is the resolver for the createProject field.
 func (r *mutationResolver) CreateProject(ctx context.Context, name string, description string, slug string, owners []string) (*model.Project, error) {
+	if err := auth.RequireAuthenticated(ctx); err != nil {
+		return nil, err
+	}
+
+	for _, p := range r.Resolver.Projects {
+		if p.Name == name {
+			return nil, errors.New("non-unique project name")
+		}
+		if p.Slug == slug {
+			return nil, errors.New("non-unique project slug")
+		}
+	}
+
 	if err := ValidateProjectName(name); err != nil {
 		return nil, err
 	}
@@ -314,7 +367,7 @@ func (r *mutationResolver) CreateProject(ctx context.Context, name string, descr
 		Name:        name,
 		Description: description,
 		Slug:        slug,
-		Creation:    time.Now(),
+		Creation:    r.Resolver.TimeProvider.Now(),
 		Owners:      ownerUsers,
 	}
 	return newProject, nil
@@ -322,9 +375,22 @@ func (r *mutationResolver) CreateProject(ctx context.Context, name string, descr
 
 // UpdateProject is the resolver for the updateProject field.
 func (r *mutationResolver) UpdateProject(ctx context.Context, id string, name string, description string, slug string, owners []string) (*model.Project, error) {
+	if err := auth.RequireAuthenticated(ctx); err != nil {
+		return nil, err
+	}
+
 	project := ProjectByID(r.Resolver, id)
 	if project == nil {
 		return nil, fmt.Errorf("project %q not found", id)
+	}
+
+	for _, p := range r.Resolver.Projects {
+		if p.Name == name {
+			return nil, errors.New("non-unique project name")
+		}
+		if p.Slug == slug {
+			return nil, errors.New("non-unique project slug")
+		}
 	}
 
 	if err := ValidateProjectName(name); err != nil {
@@ -351,312 +417,13 @@ func (r *mutationResolver) UpdateProject(ctx context.Context, id string, name st
 		Name:        name,
 		Description: description,
 		Slug:        slug,
-		Creation:    time.Now(),
+		Creation:    r.Resolver.TimeProvider.Now(),
 		Owners:      ownerUsers,
 	}
 	return newProject, nil
 }
 
-// Tasks is the resolver for the tasks field.
-func (r *projectResolver) Tasks(ctx context.Context, obj *model.Project) ([]*model.Task, error) {
-	tasks := []*model.Task{}
-	for _, t := range r.Resolver.Tasks {
-		if t.Project == obj {
-			tasks = append(tasks, t)
-		}
-	}
-	return tasks, nil
-}
-
-// Members is the resolver for the members field.
-func (r *projectResolver) Members(ctx context.Context, obj *model.Project) ([]*model.User, error) {
-	m := []*model.User{}
-	for _, t := range r.Resolver.Tasks {
-		if t.Project != obj {
-			continue
-		}
-		for _, u := range t.Assignees {
-			m = slices.AppendUnique(m, u)
-		}
-		for _, u := range t.Reporters {
-			m = slices.AppendUnique(m, u)
-		}
-	}
-	return m, nil
-}
-
-// Task is the resolver for the task field.
-func (r *queryResolver) Task(ctx context.Context, id string) (*model.Task, error) {
-	for _, t := range r.Resolver.Tasks {
-		if t.ID == id {
-			return t, nil
-		}
-	}
-	return nil, nil
-}
-
-// User is the resolver for the user field.
-func (r *queryResolver) User(ctx context.Context, id string) (*model.User, error) {
-	for _, u := range r.Resolver.Users {
-		if u.ID == id {
-			return u, nil
-		}
-	}
-	return nil, nil
-}
-
-// Project is the resolver for the project field.
-func (r *queryResolver) Project(ctx context.Context, id string) (*model.Project, error) {
-	for _, p := range r.Resolver.Projects {
-		if p.ID == id {
-			return p, nil
-		}
-	}
-	return nil, nil
-}
-
-// Tasks is the resolver for the tasks field.
-func (r *queryResolver) Tasks(ctx context.Context, filters *model.TasksFilters, order *model.TasksOrder, orderAsc bool, limit *int) ([]*model.Task, error) {
-	tasks := slices.Copy(r.Resolver.Tasks)
-	if filters != nil {
-		if filters.CreatedAfter != nil {
-			tasks = slices.FilterInPlace(tasks, func(t *model.Task) (ok bool) {
-				return t.Creation.Unix() > filters.CreatedAfter.Unix()
-			})
-			if len(tasks) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.CreatedBefore != nil {
-			tasks = slices.FilterInPlace(tasks, func(t *model.Task) (ok bool) {
-				return t.Creation.Unix() < filters.CreatedBefore.Unix()
-			})
-			if len(tasks) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.Assignees != nil {
-			tasks = slices.FilterInPlace(tasks, func(t *model.Task) (ok bool) {
-				return slices.IsSubsetGet(filters.Assignees, t.Assignees, GetUserID)
-			})
-			if len(tasks) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.Reporters != nil {
-			tasks = slices.FilterInPlace(tasks, func(t *model.Task) (ok bool) {
-				return slices.IsSubsetGet(filters.Reporters, t.Reporters, GetUserID)
-			})
-			if len(tasks) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.Tags != nil {
-			tasks = slices.FilterInPlace(tasks, func(t *model.Task) (ok bool) {
-				return slices.IsSubset(filters.Tags, t.Tags)
-			})
-			if len(tasks) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.Status != nil {
-			tasks = slices.FilterInPlace(tasks, func(t *model.Task) (ok bool) {
-				return slices.Contains(filters.Status, t.Status)
-			})
-			if len(tasks) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.Projects != nil {
-			tasks = slices.FilterInPlace(tasks, func(t *model.Task) (ok bool) {
-				return t.Project != nil &&
-					slices.Contains(filters.Projects, t.Project.ID)
-			})
-			if len(tasks) < 1 {
-				return nil, nil
-			}
-		}
-	}
-	return slices.SortAndLimit(tasks, SortFnTasks(order, orderAsc), Limit(limit)), nil
-}
-
-// Users is the resolver for the users field.
-func (r *queryResolver) Users(ctx context.Context, filters *model.UsersFilters, order *model.UsersOrder, orderAsc bool, limit *int) ([]*model.User, error) {
-	users := slices.Copy(r.Resolver.Users)
-	if filters != nil {
-		if filters.Projects != nil {
-			users = slices.FilterInPlace(users, func(u *model.User) (ok bool) {
-				p := []string{}
-				for _, t := range r.Resolver.Tasks {
-					for _, a := range t.Assignees {
-						if a == u {
-							p = slices.AppendUnique(p, t.Project.ID)
-							break
-						}
-					}
-					for _, a := range t.Reporters {
-						if a == u {
-							p = slices.AppendUnique(p, t.Project.ID)
-							break
-						}
-					}
-				}
-				return slices.IsSubset(filters.Projects, p)
-			})
-			if len(users) < 1 {
-				return nil, nil
-			}
-		}
-	}
-	return slices.SortAndLimit(users, SortFnUsers(order, orderAsc), Limit(limit)), nil
-}
-
-// Projects is the resolver for the projects field.
-func (r *queryResolver) Projects(ctx context.Context, filters *model.ProjectsFilters, order *model.ProjectsOrder, orderAsc bool, limit *int) ([]*model.Project, error) {
-	projects := slices.Copy(r.Resolver.Projects)
-	if filters != nil {
-		if filters.CreatedAfter != nil {
-			projects = slices.FilterInPlace(projects, func(p *model.Project) (ok bool) {
-				return p.Creation.Unix() > filters.CreatedAfter.Unix()
-			})
-			if len(projects) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.CreatedBefore != nil {
-			projects = slices.FilterInPlace(projects, func(p *model.Project) (ok bool) {
-				return p.Creation.Unix() < filters.CreatedBefore.Unix()
-			})
-			if len(projects) < 1 {
-				return nil, nil
-			}
-		}
-		if filters.Members != nil {
-			projects = slices.FilterInPlace(projects, func(p *model.Project) (ok bool) {
-				memberIDs := []string{}
-				for _, t := range r.Resolver.Tasks {
-					if t.Project != p {
-						continue
-					}
-					for _, u := range t.Assignees {
-						memberIDs = slices.AppendUnique(memberIDs, u.ID)
-					}
-					for _, u := range t.Reporters {
-						memberIDs = slices.AppendUnique(memberIDs, u.ID)
-					}
-				}
-				return slices.IsSubset(filters.Members, memberIDs)
-			})
-			if len(projects) < 1 {
-				return nil, nil
-			}
-		}
-	}
-	return slices.SortAndLimit(
-		projects,
-		SortFnProjects(order, orderAsc, r.Resolver),
-		Limit(limit),
-	), nil
-}
-
-// IsBlockedBy is the resolver for the isBlockedBy field.
-func (r *taskResolver) IsBlockedBy(ctx context.Context, obj *model.Task) ([]*model.Task, error) {
-	blockedBy := []*model.Task{}
-	for _, t := range r.Resolver.Tasks {
-		if t == obj {
-			continue
-		}
-		for _, t := range t.Blocks {
-			if t == obj {
-				blockedBy = slices.AppendUnique(blockedBy, t)
-			}
-		}
-	}
-	return blockedBy, nil
-}
-
-// RelatesTo is the resolver for the relatesTo field.
-func (r *taskResolver) RelatesTo(ctx context.Context, obj *model.Task) ([]*model.Task, error) {
-	relatesTo := []*model.Task{}
-	relatesTo = append(relatesTo, obj.RelatesTo...)
-	for _, t := range r.Resolver.Tasks {
-		if t == obj {
-			continue
-		}
-		for _, tr := range t.RelatesTo {
-			if tr == obj {
-				relatesTo = slices.AppendUnique(relatesTo, tr)
-			}
-		}
-	}
-	return relatesTo, nil
-}
-
-// Projects is the resolver for the projects field.
-func (r *userResolver) Projects(ctx context.Context, obj *model.User) ([]*model.Project, error) {
-	p := []*model.Project{}
-	for _, t := range r.Resolver.Tasks {
-		for _, u := range t.Assignees {
-			if u == obj {
-				p = slices.AppendUnique(p, t.Project)
-				break
-			}
-		}
-		for _, u := range t.Reporters {
-			if u == obj {
-				p = slices.AppendUnique(p, t.Project)
-				break
-			}
-		}
-	}
-	return p, nil
-}
-
-// TasksAssigned is the resolver for the tasksAssigned field.
-func (r *userResolver) TasksAssigned(ctx context.Context, obj *model.User) ([]*model.Task, error) {
-	tasks := []*model.Task{}
-	for _, t := range r.Tasks {
-		for _, r := range t.Assignees {
-			if r == obj {
-				tasks = append(tasks, t)
-			}
-		}
-	}
-	return tasks, nil
-}
-
-// TasksReported is the resolver for the tasksReported field.
-func (r *userResolver) TasksReported(ctx context.Context, obj *model.User) ([]*model.Task, error) {
-	tasks := []*model.Task{}
-	for _, t := range r.Tasks {
-		for _, r := range t.Reporters {
-			if r == obj {
-				tasks = append(tasks, t)
-			}
-		}
-	}
-	return tasks, nil
-}
-
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
-// Project returns ProjectResolver implementation.
-func (r *Resolver) Project() ProjectResolver { return &projectResolver{r} }
-
-// Query returns QueryResolver implementation.
-func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
-
-// Task returns TaskResolver implementation.
-func (r *Resolver) Task() TaskResolver { return &taskResolver{r} }
-
-// User returns UserResolver implementation.
-func (r *Resolver) User() UserResolver { return &userResolver{r} }
-
-type (
-	mutationResolver struct{ *Resolver }
-	projectResolver  struct{ *Resolver }
-	queryResolver    struct{ *Resolver }
-	taskResolver     struct{ *Resolver }
-	userResolver     struct{ *Resolver }
-)
+type mutationResolver struct{ *Resolver }

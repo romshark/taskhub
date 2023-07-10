@@ -15,7 +15,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
-	"github.com/romshark/taskhub/graph/model"
+	"github.com/romshark/taskhub/api/graph/model"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
@@ -52,10 +52,10 @@ type ComplexityRoot struct {
 	Mutation struct {
 		CreateProject func(childComplexity int, name string, description string, slug string, owners []string) int
 		CreateTask    func(childComplexity int, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string, blocks []string, relatesTo []string) int
-		CreateUser    func(childComplexity int, displayName string, role string, location string, manager *string, subordinates []string) int
+		CreateUser    func(childComplexity int, email string, password string, displayName string, role string, location string, manager *string, subordinates []string) int
 		UpdateProject func(childComplexity int, id string, name string, description string, slug string, owners []string) int
 		UpdateTask    func(childComplexity int, id string, title string, description *string, status model.TaskStatus, priority model.TaskPriority, due *time.Time, tags []string, project string, assignees []string, reporters []string, blocks []string, relatesTo []string) int
-		UpdateUser    func(childComplexity int, id string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) int
+		UpdateUser    func(childComplexity int, id string, email string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) int
 	}
 
 	Project struct {
@@ -70,12 +70,13 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Project  func(childComplexity int, id string) int
-		Projects func(childComplexity int, filters *model.ProjectsFilters, order *model.ProjectsOrder, orderAsc bool, limit *int) int
-		Task     func(childComplexity int, id string) int
-		Tasks    func(childComplexity int, filters *model.TasksFilters, order *model.TasksOrder, orderAsc bool, limit *int) int
-		User     func(childComplexity int, id string) int
-		Users    func(childComplexity int, filters *model.UsersFilters, order *model.UsersOrder, orderAsc bool, limit *int) int
+		AccessToken func(childComplexity int, email string, password string) int
+		Project     func(childComplexity int, id string) int
+		Projects    func(childComplexity int, filters *model.ProjectsFilters, order *model.ProjectsOrder, orderAsc bool, limit *int) int
+		Task        func(childComplexity int, id string) int
+		Tasks       func(childComplexity int, filters *model.TasksFilters, order *model.TasksOrder, orderAsc bool, limit *int) int
+		User        func(childComplexity int, id string) int
+		Users       func(childComplexity int, filters *model.UsersFilters, order *model.UsersOrder, orderAsc bool, limit *int) int
 	}
 
 	Task struct {
@@ -97,6 +98,7 @@ type ComplexityRoot struct {
 
 	User struct {
 		DisplayName    func(childComplexity int) int
+		Email          func(childComplexity int) int
 		ID             func(childComplexity int) int
 		Location       func(childComplexity int) int
 		Manager        func(childComplexity int) int
@@ -110,8 +112,8 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
-	CreateUser(ctx context.Context, displayName string, role string, location string, manager *string, subordinates []string) (*model.User, error)
-	UpdateUser(ctx context.Context, id string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) (*model.User, error)
+	CreateUser(ctx context.Context, email string, password string, displayName string, role string, location string, manager *string, subordinates []string) (*model.User, error)
+	UpdateUser(ctx context.Context, id string, email string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) (*model.User, error)
 	CreateTask(ctx context.Context, title string, project string, status model.TaskStatus, priority model.TaskPriority, description *string, due *time.Time, tags []string, assignees []string, reporters []string, blocks []string, relatesTo []string) (*model.Task, error)
 	UpdateTask(ctx context.Context, id string, title string, description *string, status model.TaskStatus, priority model.TaskPriority, due *time.Time, tags []string, project string, assignees []string, reporters []string, blocks []string, relatesTo []string) (*model.Task, error)
 	CreateProject(ctx context.Context, name string, description string, slug string, owners []string) (*model.Project, error)
@@ -123,6 +125,7 @@ type ProjectResolver interface {
 	Members(ctx context.Context, obj *model.Project) ([]*model.User, error)
 }
 type QueryResolver interface {
+	AccessToken(ctx context.Context, email string, password string) (string, error)
 	Task(ctx context.Context, id string) (*model.Task, error)
 	User(ctx context.Context, id string) (*model.User, error)
 	Project(ctx context.Context, id string) (*model.Project, error)
@@ -190,7 +193,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.CreateUser(childComplexity, args["displayName"].(string), args["role"].(string), args["location"].(string), args["manager"].(*string), args["subordinates"].([]string)), true
+		return e.complexity.Mutation.CreateUser(childComplexity, args["email"].(string), args["password"].(string), args["displayName"].(string), args["role"].(string), args["location"].(string), args["manager"].(*string), args["subordinates"].([]string)), true
 
 	case "Mutation.updateProject":
 		if e.complexity.Mutation.UpdateProject == nil {
@@ -226,7 +229,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(string), args["displayName"].(string), args["role"].(string), args["location"].(string), args["personalStatus"].(*string), args["manager"].(*string), args["subordinates"].([]string)), true
+		return e.complexity.Mutation.UpdateUser(childComplexity, args["id"].(string), args["email"].(string), args["displayName"].(string), args["role"].(string), args["location"].(string), args["personalStatus"].(*string), args["manager"].(*string), args["subordinates"].([]string)), true
 
 	case "Project.creation":
 		if e.complexity.Project.Creation == nil {
@@ -283,6 +286,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Project.Tasks(childComplexity), true
+
+	case "Query.accessToken":
+		if e.complexity.Query.AccessToken == nil {
+			break
+		}
+
+		args, err := ec.field_Query_accessToken_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.AccessToken(childComplexity, args["email"].(string), args["password"].(string)), true
 
 	case "Query.project":
 		if e.complexity.Query.Project == nil {
@@ -461,6 +476,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.User.DisplayName(childComplexity), true
 
+	case "User.email":
+		if e.complexity.User.Email == nil {
+			break
+		}
+
+		return e.complexity.User.Email(childComplexity), true
+
 	case "User.id":
 		if e.complexity.User.ID == nil {
 			break
@@ -631,7 +653,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 	return introspection.WrapTypeFromDef(parsedSchema, parsedSchema.Types[name]), nil
 }
 
-//go:embed "schema.graphqls"
+//go:embed "mutations.graphqls" "query.graphqls" "types.graphqls"
 var sourcesFS embed.FS
 
 func sourceData(filename string) string {
@@ -643,7 +665,9 @@ func sourceData(filename string) string {
 }
 
 var sources = []*ast.Source{
-	{Name: "schema.graphqls", Input: sourceData("schema.graphqls"), BuiltIn: false},
+	{Name: "mutations.graphqls", Input: sourceData("mutations.graphqls"), BuiltIn: false},
+	{Name: "query.graphqls", Input: sourceData("query.graphqls"), BuiltIn: false},
+	{Name: "types.graphqls", Input: sourceData("types.graphqls"), BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -717,7 +741,7 @@ func (ec *executionContext) field_Mutation_createTask_args(ctx context.Context, 
 	var arg2 model.TaskStatus
 	if tmp, ok := rawArgs["status"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-		arg2, err = ec.unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatus(ctx, tmp)
+		arg2, err = ec.unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatus(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -726,7 +750,7 @@ func (ec *executionContext) field_Mutation_createTask_args(ctx context.Context, 
 	var arg3 model.TaskPriority
 	if tmp, ok := rawArgs["priority"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-		arg3, err = ec.unmarshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskPriority(ctx, tmp)
+		arg3, err = ec.unmarshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskPriority(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -802,50 +826,68 @@ func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, 
 	var err error
 	args := map[string]interface{}{}
 	var arg0 string
-	if tmp, ok := rawArgs["displayName"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
+	if tmp, ok := rawArgs["email"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("email"))
 		arg0, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["displayName"] = arg0
+	args["email"] = arg0
 	var arg1 string
-	if tmp, ok := rawArgs["role"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+	if tmp, ok := rawArgs["password"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
 		arg1, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["role"] = arg1
+	args["password"] = arg1
 	var arg2 string
-	if tmp, ok := rawArgs["location"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("location"))
+	if tmp, ok := rawArgs["displayName"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
 		arg2, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["location"] = arg2
-	var arg3 *string
+	args["displayName"] = arg2
+	var arg3 string
+	if tmp, ok := rawArgs["role"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+		arg3, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["role"] = arg3
+	var arg4 string
+	if tmp, ok := rawArgs["location"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("location"))
+		arg4, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["location"] = arg4
+	var arg5 *string
 	if tmp, ok := rawArgs["manager"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("manager"))
-		arg3, err = ec.unmarshalOID2ᚖstring(ctx, tmp)
+		arg5, err = ec.unmarshalOID2ᚖstring(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["manager"] = arg3
-	var arg4 []string
+	args["manager"] = arg5
+	var arg6 []string
 	if tmp, ok := rawArgs["subordinates"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("subordinates"))
-		arg4, err = ec.unmarshalOID2ᚕstringᚄ(ctx, tmp)
+		arg6, err = ec.unmarshalOID2ᚕstringᚄ(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["subordinates"] = arg4
+	args["subordinates"] = arg6
 	return args, nil
 }
 
@@ -933,7 +975,7 @@ func (ec *executionContext) field_Mutation_updateTask_args(ctx context.Context, 
 	var arg3 model.TaskStatus
 	if tmp, ok := rawArgs["status"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-		arg3, err = ec.unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatus(ctx, tmp)
+		arg3, err = ec.unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatus(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -942,7 +984,7 @@ func (ec *executionContext) field_Mutation_updateTask_args(ctx context.Context, 
 	var arg4 model.TaskPriority
 	if tmp, ok := rawArgs["priority"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-		arg4, err = ec.unmarshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskPriority(ctx, tmp)
+		arg4, err = ec.unmarshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskPriority(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1027,59 +1069,68 @@ func (ec *executionContext) field_Mutation_updateUser_args(ctx context.Context, 
 	}
 	args["id"] = arg0
 	var arg1 string
-	if tmp, ok := rawArgs["displayName"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
+	if tmp, ok := rawArgs["email"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("email"))
 		arg1, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["displayName"] = arg1
+	args["email"] = arg1
 	var arg2 string
-	if tmp, ok := rawArgs["role"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
+	if tmp, ok := rawArgs["displayName"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("displayName"))
 		arg2, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["role"] = arg2
+	args["displayName"] = arg2
 	var arg3 string
-	if tmp, ok := rawArgs["location"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("location"))
+	if tmp, ok := rawArgs["role"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
 		arg3, err = ec.unmarshalNString2string(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["location"] = arg3
-	var arg4 *string
+	args["role"] = arg3
+	var arg4 string
+	if tmp, ok := rawArgs["location"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("location"))
+		arg4, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["location"] = arg4
+	var arg5 *string
 	if tmp, ok := rawArgs["personalStatus"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("personalStatus"))
-		arg4, err = ec.unmarshalOString2ᚖstring(ctx, tmp)
+		arg5, err = ec.unmarshalOString2ᚖstring(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["personalStatus"] = arg4
-	var arg5 *string
+	args["personalStatus"] = arg5
+	var arg6 *string
 	if tmp, ok := rawArgs["manager"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("manager"))
-		arg5, err = ec.unmarshalOID2ᚖstring(ctx, tmp)
+		arg6, err = ec.unmarshalOID2ᚖstring(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["manager"] = arg5
-	var arg6 []string
+	args["manager"] = arg6
+	var arg7 []string
 	if tmp, ok := rawArgs["subordinates"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("subordinates"))
-		arg6, err = ec.unmarshalOID2ᚕstringᚄ(ctx, tmp)
+		arg7, err = ec.unmarshalOID2ᚕstringᚄ(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["subordinates"] = arg6
+	args["subordinates"] = arg7
 	return args, nil
 }
 
@@ -1095,6 +1146,30 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		}
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_accessToken_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["email"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("email"))
+		arg0, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["email"] = arg0
+	var arg1 string
+	if tmp, ok := rawArgs["password"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+		arg1, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["password"] = arg1
 	return args, nil
 }
 
@@ -1119,7 +1194,7 @@ func (ec *executionContext) field_Query_projects_args(ctx context.Context, rawAr
 	var arg0 *model.ProjectsFilters
 	if tmp, ok := rawArgs["filters"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filters"))
-		arg0, err = ec.unmarshalOProjectsFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectsFilters(ctx, tmp)
+		arg0, err = ec.unmarshalOProjectsFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectsFilters(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1128,7 +1203,7 @@ func (ec *executionContext) field_Query_projects_args(ctx context.Context, rawAr
 	var arg1 *model.ProjectsOrder
 	if tmp, ok := rawArgs["order"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("order"))
-		arg1, err = ec.unmarshalOProjectsOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectsOrder(ctx, tmp)
+		arg1, err = ec.unmarshalOProjectsOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectsOrder(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1176,7 +1251,7 @@ func (ec *executionContext) field_Query_tasks_args(ctx context.Context, rawArgs 
 	var arg0 *model.TasksFilters
 	if tmp, ok := rawArgs["filters"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filters"))
-		arg0, err = ec.unmarshalOTasksFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTasksFilters(ctx, tmp)
+		arg0, err = ec.unmarshalOTasksFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTasksFilters(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1185,7 +1260,7 @@ func (ec *executionContext) field_Query_tasks_args(ctx context.Context, rawArgs 
 	var arg1 *model.TasksOrder
 	if tmp, ok := rawArgs["order"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("order"))
-		arg1, err = ec.unmarshalOTasksOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTasksOrder(ctx, tmp)
+		arg1, err = ec.unmarshalOTasksOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTasksOrder(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1233,7 +1308,7 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 	var arg0 *model.UsersFilters
 	if tmp, ok := rawArgs["filters"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filters"))
-		arg0, err = ec.unmarshalOUsersFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUsersFilters(ctx, tmp)
+		arg0, err = ec.unmarshalOUsersFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUsersFilters(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1242,7 +1317,7 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 	var arg1 *model.UsersOrder
 	if tmp, ok := rawArgs["order"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("order"))
-		arg1, err = ec.unmarshalOUsersOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUsersOrder(ctx, tmp)
+		arg1, err = ec.unmarshalOUsersOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUsersOrder(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -1321,7 +1396,7 @@ func (ec *executionContext) _Mutation_createUser(ctx context.Context, field grap
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().CreateUser(rctx, fc.Args["displayName"].(string), fc.Args["role"].(string), fc.Args["location"].(string), fc.Args["manager"].(*string), fc.Args["subordinates"].([]string))
+		return ec.resolvers.Mutation().CreateUser(rctx, fc.Args["email"].(string), fc.Args["password"].(string), fc.Args["displayName"].(string), fc.Args["role"].(string), fc.Args["location"].(string), fc.Args["manager"].(*string), fc.Args["subordinates"].([]string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1335,7 +1410,7 @@ func (ec *executionContext) _Mutation_createUser(ctx context.Context, field grap
 	}
 	res := resTmp.(*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1348,6 +1423,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -1398,7 +1475,7 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().UpdateUser(rctx, fc.Args["id"].(string), fc.Args["displayName"].(string), fc.Args["role"].(string), fc.Args["location"].(string), fc.Args["personalStatus"].(*string), fc.Args["manager"].(*string), fc.Args["subordinates"].([]string))
+		return ec.resolvers.Mutation().UpdateUser(rctx, fc.Args["id"].(string), fc.Args["email"].(string), fc.Args["displayName"].(string), fc.Args["role"].(string), fc.Args["location"].(string), fc.Args["personalStatus"].(*string), fc.Args["manager"].(*string), fc.Args["subordinates"].([]string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1412,7 +1489,7 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 	}
 	res := resTmp.(*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1425,6 +1502,8 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -1489,7 +1568,7 @@ func (ec *executionContext) _Mutation_createTask(ctx context.Context, field grap
 	}
 	res := resTmp.(*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTask(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_createTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1574,7 +1653,7 @@ func (ec *executionContext) _Mutation_updateTask(ctx context.Context, field grap
 	}
 	res := resTmp.(*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTask(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_updateTask(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1659,7 +1738,7 @@ func (ec *executionContext) _Mutation_createProject(ctx context.Context, field g
 	}
 	res := resTmp.(*model.Project)
 	fc.Result = res
-	return ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
+	return ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1732,7 +1811,7 @@ func (ec *executionContext) _Mutation_updateProject(ctx context.Context, field g
 	}
 	res := resTmp.(*model.Project)
 	fc.Result = res
-	return ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
+	return ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_updateProject(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -1981,7 +2060,7 @@ func (ec *executionContext) _Project_tasks(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.([]*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Project_tasks(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2096,7 +2175,7 @@ func (ec *executionContext) _Project_owners(ctx context.Context, field graphql.C
 	}
 	res := resTmp.([]*model.User)
 	fc.Result = res
-	return ec.marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
+	return ec.marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Project_owners(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2109,6 +2188,8 @@ func (ec *executionContext) fieldContext_Project_owners(ctx context.Context, fie
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -2162,7 +2243,7 @@ func (ec *executionContext) _Project_members(ctx context.Context, field graphql.
 	}
 	res := resTmp.([]*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Project_members(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2175,6 +2256,8 @@ func (ec *executionContext) fieldContext_Project_members(ctx context.Context, fi
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -2196,6 +2279,61 @@ func (ec *executionContext) fieldContext_Project_members(ctx context.Context, fi
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_accessToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Query_accessToken(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().AccessToken(rctx, fc.Args["email"].(string), fc.Args["password"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Query_accessToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_accessToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -2225,7 +2363,7 @@ func (ec *executionContext) _Query_task(ctx context.Context, field graphql.Colle
 	}
 	res := resTmp.(*model.Task)
 	fc.Result = res
-	return ec.marshalOTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTask(ctx, field.Selections, res)
+	return ec.marshalOTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_task(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2307,7 +2445,7 @@ func (ec *executionContext) _Query_user(ctx context.Context, field graphql.Colle
 	}
 	res := resTmp.(*model.User)
 	fc.Result = res
-	return ec.marshalOUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
+	return ec.marshalOUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_user(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2320,6 +2458,8 @@ func (ec *executionContext) fieldContext_Query_user(ctx context.Context, field g
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -2381,7 +2521,7 @@ func (ec *executionContext) _Query_project(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.(*model.Project)
 	fc.Result = res
-	return ec.marshalOProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
+	return ec.marshalOProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_project(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2454,7 +2594,7 @@ func (ec *executionContext) _Query_tasks(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.([]*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_tasks(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2539,7 +2679,7 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.([]*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_users(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2552,6 +2692,8 @@ func (ec *executionContext) fieldContext_Query_users(ctx context.Context, field 
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -2616,7 +2758,7 @@ func (ec *executionContext) _Query_projects(ctx context.Context, field graphql.C
 	}
 	res := resTmp.([]*model.Project)
 	fc.Result = res
-	return ec.marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectᚄ(ctx, field.Selections, res)
+	return ec.marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_projects(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2947,7 +3089,7 @@ func (ec *executionContext) _Task_priority(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.(model.TaskPriority)
 	fc.Result = res
-	return ec.marshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskPriority(ctx, field.Selections, res)
+	return ec.marshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskPriority(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_priority(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2991,7 +3133,7 @@ func (ec *executionContext) _Task_status(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.(model.TaskStatus)
 	fc.Result = res
-	return ec.marshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatus(ctx, field.Selections, res)
+	return ec.marshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_status(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3164,7 +3306,7 @@ func (ec *executionContext) _Task_project(ctx context.Context, field graphql.Col
 	}
 	res := resTmp.(*model.Project)
 	fc.Result = res
-	return ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
+	return ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_project(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3226,7 +3368,7 @@ func (ec *executionContext) _Task_assignees(ctx context.Context, field graphql.C
 	}
 	res := resTmp.([]*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_assignees(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3239,6 +3381,8 @@ func (ec *executionContext) fieldContext_Task_assignees(ctx context.Context, fie
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -3292,7 +3436,7 @@ func (ec *executionContext) _Task_reporters(ctx context.Context, field graphql.C
 	}
 	res := resTmp.([]*model.User)
 	fc.Result = res
-	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
+	return ec.marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_reporters(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3305,6 +3449,8 @@ func (ec *executionContext) fieldContext_Task_reporters(ctx context.Context, fie
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -3358,7 +3504,7 @@ func (ec *executionContext) _Task_isBlockedBy(ctx context.Context, field graphql
 	}
 	res := resTmp.([]*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_isBlockedBy(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3432,7 +3578,7 @@ func (ec *executionContext) _Task_blocks(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.([]*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_blocks(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3506,7 +3652,7 @@ func (ec *executionContext) _Task_relatesTo(ctx context.Context, field graphql.C
 	}
 	res := resTmp.([]*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Task_relatesTo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3591,6 +3737,50 @@ func (ec *executionContext) fieldContext_User_id(ctx context.Context, field grap
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _User_email(ctx context.Context, field graphql.CollectedField, obj *model.User) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_User_email(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Email, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_User_email(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3794,7 +3984,7 @@ func (ec *executionContext) _User_manager(ctx context.Context, field graphql.Col
 	}
 	res := resTmp.(*model.User)
 	fc.Result = res
-	return ec.marshalOUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
+	return ec.marshalOUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_User_manager(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3807,6 +3997,8 @@ func (ec *executionContext) fieldContext_User_manager(ctx context.Context, field
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -3857,7 +4049,7 @@ func (ec *executionContext) _User_subordinates(ctx context.Context, field graphq
 	}
 	res := resTmp.([]*model.User)
 	fc.Result = res
-	return ec.marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
+	return ec.marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_User_subordinates(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3870,6 +4062,8 @@ func (ec *executionContext) fieldContext_User_subordinates(ctx context.Context, 
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
 			case "displayName":
 				return ec.fieldContext_User_displayName(ctx, field)
 			case "role":
@@ -3923,7 +4117,7 @@ func (ec *executionContext) _User_projects(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.([]*model.Project)
 	fc.Result = res
-	return ec.marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectᚄ(ctx, field.Selections, res)
+	return ec.marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_User_projects(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3985,7 +4179,7 @@ func (ec *executionContext) _User_tasksAssigned(ctx context.Context, field graph
 	}
 	res := resTmp.([]*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_User_tasksAssigned(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4059,7 +4253,7 @@ func (ec *executionContext) _User_tasksReported(ctx context.Context, field graph
 	}
 	res := resTmp.([]*model.Task)
 	fc.Result = res
-	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
+	return ec.marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_User_tasksReported(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5970,7 +6164,7 @@ func (ec *executionContext) unmarshalInputTasksFilters(ctx context.Context, obj 
 			var err error
 
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -6290,6 +6484,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Query")
+		case "accessToken":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_accessToken(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "task":
 			field := field
 
@@ -6617,6 +6833,11 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			out.Values[i] = graphql.MarshalString("User")
 		case "id":
 			out.Values[i] = ec._User_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "email":
+			out.Values[i] = ec._User_email(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -7160,11 +7381,11 @@ func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast
 	return ret
 }
 
-func (ec *executionContext) marshalNProject2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx context.Context, sel ast.SelectionSet, v model.Project) graphql.Marshaler {
+func (ec *executionContext) marshalNProject2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx context.Context, sel ast.SelectionSet, v model.Project) graphql.Marshaler {
 	return ec._Project(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Project) graphql.Marshaler {
+func (ec *executionContext) marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Project) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -7188,7 +7409,7 @@ func (ec *executionContext) marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtask
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx, sel, v[i])
+			ret[i] = ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -7208,7 +7429,7 @@ func (ec *executionContext) marshalNProject2ᚕᚖgithubᚗcomᚋromsharkᚋtask
 	return ret
 }
 
-func (ec *executionContext) marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx context.Context, sel ast.SelectionSet, v *model.Project) graphql.Marshaler {
+func (ec *executionContext) marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx context.Context, sel ast.SelectionSet, v *model.Project) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -7265,11 +7486,11 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
-func (ec *executionContext) marshalNTask2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTask(ctx context.Context, sel ast.SelectionSet, v model.Task) graphql.Marshaler {
+func (ec *executionContext) marshalNTask2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx context.Context, sel ast.SelectionSet, v model.Task) graphql.Marshaler {
 	return ec._Task(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Task) graphql.Marshaler {
+func (ec *executionContext) marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Task) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -7293,7 +7514,7 @@ func (ec *executionContext) marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhub
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTask(ctx, sel, v[i])
+			ret[i] = ec.marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -7313,7 +7534,7 @@ func (ec *executionContext) marshalNTask2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhub
 	return ret
 }
 
-func (ec *executionContext) marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTask(ctx context.Context, sel ast.SelectionSet, v *model.Task) graphql.Marshaler {
+func (ec *executionContext) marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx context.Context, sel ast.SelectionSet, v *model.Task) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -7323,23 +7544,23 @@ func (ec *executionContext) marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋ
 	return ec._Task(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskPriority(ctx context.Context, v interface{}) (model.TaskPriority, error) {
+func (ec *executionContext) unmarshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskPriority(ctx context.Context, v interface{}) (model.TaskPriority, error) {
 	var res model.TaskPriority
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskPriority(ctx context.Context, sel ast.SelectionSet, v model.TaskPriority) graphql.Marshaler {
+func (ec *executionContext) marshalNTaskPriority2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskPriority(ctx context.Context, sel ast.SelectionSet, v model.TaskPriority) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatus(ctx context.Context, v interface{}) (model.TaskStatus, error) {
+func (ec *executionContext) unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatus(ctx context.Context, v interface{}) (model.TaskStatus, error) {
 	var res model.TaskStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatus(ctx context.Context, sel ast.SelectionSet, v model.TaskStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatus(ctx context.Context, sel ast.SelectionSet, v model.TaskStatus) graphql.Marshaler {
 	return v
 }
 
@@ -7358,11 +7579,11 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) marshalNUser2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v model.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v model.User) graphql.Marshaler {
 	return ec._User(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.User) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -7386,7 +7607,7 @@ func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhub
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx, sel, v[i])
+			ret[i] = ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -7406,7 +7627,7 @@ func (ec *executionContext) marshalNUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhub
 	return ret
 }
 
-func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -7765,14 +7986,14 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	return res
 }
 
-func (ec *executionContext) marshalOProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProject(ctx context.Context, sel ast.SelectionSet, v *model.Project) graphql.Marshaler {
+func (ec *executionContext) marshalOProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx context.Context, sel ast.SelectionSet, v *model.Project) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Project(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOProjectsFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectsFilters(ctx context.Context, v interface{}) (*model.ProjectsFilters, error) {
+func (ec *executionContext) unmarshalOProjectsFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectsFilters(ctx context.Context, v interface{}) (*model.ProjectsFilters, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -7780,7 +8001,7 @@ func (ec *executionContext) unmarshalOProjectsFilters2ᚖgithubᚗcomᚋromshark
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOProjectsOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectsOrder(ctx context.Context, v interface{}) (*model.ProjectsOrder, error) {
+func (ec *executionContext) unmarshalOProjectsOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectsOrder(ctx context.Context, v interface{}) (*model.ProjectsOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -7789,7 +8010,7 @@ func (ec *executionContext) unmarshalOProjectsOrder2ᚖgithubᚗcomᚋromshark�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOProjectsOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐProjectsOrder(ctx context.Context, sel ast.SelectionSet, v *model.ProjectsOrder) graphql.Marshaler {
+func (ec *executionContext) marshalOProjectsOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProjectsOrder(ctx context.Context, sel ast.SelectionSet, v *model.ProjectsOrder) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -7860,14 +8081,14 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) marshalOTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTask(ctx context.Context, sel ast.SelectionSet, v *model.Task) graphql.Marshaler {
+func (ec *executionContext) marshalOTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx context.Context, sel ast.SelectionSet, v *model.Task) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Task(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatusᚄ(ctx context.Context, v interface{}) ([]model.TaskStatus, error) {
+func (ec *executionContext) unmarshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatusᚄ(ctx context.Context, v interface{}) ([]model.TaskStatus, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -7879,7 +8100,7 @@ func (ec *executionContext) unmarshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋta
 	res := make([]model.TaskStatus, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatus(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatus(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -7887,7 +8108,7 @@ func (ec *executionContext) unmarshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋta
 	return res, nil
 }
 
-func (ec *executionContext) marshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TaskStatus) graphql.Marshaler {
+func (ec *executionContext) marshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TaskStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -7914,7 +8135,7 @@ func (ec *executionContext) marshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtask
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTaskStatus(ctx, sel, v[i])
+			ret[i] = ec.marshalNTaskStatus2githubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTaskStatus(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -7934,7 +8155,7 @@ func (ec *executionContext) marshalOTaskStatus2ᚕgithubᚗcomᚋromsharkᚋtask
 	return ret
 }
 
-func (ec *executionContext) unmarshalOTasksFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTasksFilters(ctx context.Context, v interface{}) (*model.TasksFilters, error) {
+func (ec *executionContext) unmarshalOTasksFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTasksFilters(ctx context.Context, v interface{}) (*model.TasksFilters, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -7942,7 +8163,7 @@ func (ec *executionContext) unmarshalOTasksFilters2ᚖgithubᚗcomᚋromsharkᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOTasksOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTasksOrder(ctx context.Context, v interface{}) (*model.TasksOrder, error) {
+func (ec *executionContext) unmarshalOTasksOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTasksOrder(ctx context.Context, v interface{}) (*model.TasksOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -7951,7 +8172,7 @@ func (ec *executionContext) unmarshalOTasksOrder2ᚖgithubᚗcomᚋromsharkᚋta
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOTasksOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐTasksOrder(ctx context.Context, sel ast.SelectionSet, v *model.TasksOrder) graphql.Marshaler {
+func (ec *executionContext) marshalOTasksOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTasksOrder(ctx context.Context, sel ast.SelectionSet, v *model.TasksOrder) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -7974,7 +8195,7 @@ func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel
 	return res
 }
 
-func (ec *executionContext) marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.User) graphql.Marshaler {
+func (ec *executionContext) marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.User) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -8001,7 +8222,7 @@ func (ec *executionContext) marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhub
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx, sel, v[i])
+			ret[i] = ec.marshalNUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -8021,14 +8242,14 @@ func (ec *executionContext) marshalOUser2ᚕᚖgithubᚗcomᚋromsharkᚋtaskhub
 	return ret
 }
 
-func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
+func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUser(ctx context.Context, sel ast.SelectionSet, v *model.User) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._User(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOUsersFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUsersFilters(ctx context.Context, v interface{}) (*model.UsersFilters, error) {
+func (ec *executionContext) unmarshalOUsersFilters2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUsersFilters(ctx context.Context, v interface{}) (*model.UsersFilters, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8036,7 +8257,7 @@ func (ec *executionContext) unmarshalOUsersFilters2ᚖgithubᚗcomᚋromsharkᚋ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOUsersOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUsersOrder(ctx context.Context, v interface{}) (*model.UsersOrder, error) {
+func (ec *executionContext) unmarshalOUsersOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUsersOrder(ctx context.Context, v interface{}) (*model.UsersOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8045,7 +8266,7 @@ func (ec *executionContext) unmarshalOUsersOrder2ᚖgithubᚗcomᚋromsharkᚋta
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOUsersOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋgraphᚋmodelᚐUsersOrder(ctx context.Context, sel ast.SelectionSet, v *model.UsersOrder) graphql.Marshaler {
+func (ec *executionContext) marshalOUsersOrder2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐUsersOrder(ctx context.Context, sel ast.SelectionSet, v *model.UsersOrder) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

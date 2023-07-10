@@ -1,0 +1,75 @@
+type Mutation {
+  createUser(
+    # email must be unique
+    email: String!
+    password: String!
+    # displayName must be unique
+    displayName: String!
+    role: String!
+    location: String!
+    manager: ID
+    subordinates: [ID!]
+  ): User!
+
+  updateUser(
+    id: ID!
+    # email must be unique
+    email: String!
+    # displayName must be unique
+    displayName: String!
+    role: String!
+    location: String!
+    personalStatus: String
+    manager: ID
+    subordinates: [ID!]
+  ): User!
+
+  createTask(
+    # title must be unique
+    title: String!
+    project: ID!
+    status: TaskStatus! = TODO
+    priority: TaskPriority!
+    description: String
+    due: Time
+    tags: [String!]
+    assignees: [ID!]
+    reporters: [ID!]
+    blocks: [ID!]!
+    relatesTo: [ID!]!
+  ): Task!
+
+  updateTask(
+    id: ID!
+    # title must be unique
+    title: String!
+    description: String
+    status: TaskStatus!
+    priority: TaskPriority!
+    due: Time
+    tags: [String!]!
+    project: ID!
+    assignees: [ID!]!
+    reporters: [ID!]!
+    blocks: [ID!]!
+    relatesTo: [ID!]!
+  ): Task!
+
+  createProject(
+    # name must be unique
+    name: String!
+    description: String!
+    # slug must be unique
+    slug: String!
+    owners: [ID!]!
+  ): Project!
+
+  updateProject(
+    id: ID!
+    name: String!
+    description: String!
+    # slug must be unique
+    slug: String!
+    owners: [ID!]!
+  ): Project!
+}

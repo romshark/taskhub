@@ -1,0 +1,100 @@
+scalar Time
+
+enum TasksOrder {
+  PRIORITY
+  CREATION_TIME
+  DUE_TIME
+  TITLE_ALPHA
+}
+
+input TasksFilters {
+  assignees: [ID!]
+  reporters: [ID!]
+  projects: [ID!]
+  status: [TaskStatus!]
+  tags: [String!]
+  createdBefore: Time
+  createdAfter: Time
+}
+
+input ProjectsFilters {
+  members: [ID!]
+  createdBefore: Time
+  createdAfter: Time
+}
+
+input UsersFilters {
+  name: String!
+  projects: [ID!]
+}
+
+enum UsersOrder {
+  NAME_ALPHA
+}
+
+enum ProjectsOrder {
+  NAME_ALPHA
+  NUM_MEMBERS
+  NUM_TASKS
+}
+
+type Task {
+  id: ID!
+  title: String!
+  description: String
+  priority: TaskPriority!
+  status: TaskStatus!
+  creation: Time!
+  due: Time
+  tags: [String!]!
+
+  project: Project!
+  assignees: [User!]!
+  reporters: [User!]!
+  # isBlockedBy links tasks that are blocking this task
+  isBlockedBy: [Task!]!
+  # blocks links tasks that are blocked by this task
+  blocks: [Task!]!
+  # relatesTo links related tasks
+  relatesTo: [Task!]!
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+type User {
+  id: ID!
+  email: String!
+  displayName: String!
+  role: String!
+  location: String!
+  personalStatus: String
+
+  manager: User
+  subordinates: [User!]
+  projects: [Project!]!
+  tasksAssigned: [Task!]!
+  tasksReported: [Task!]!
+}
+
+type Project {
+  id: ID!
+  name: String!
+  description: String!
+  slug: String!
+  tasks: [Task!]!
+  creation: Time!
+
+  owners: [User!]
+  members: [User!]!
+}
+
+enum TaskPriority {
+  BLOCKER
+  HIGH
+  MEDIUM
+  LOW
+}

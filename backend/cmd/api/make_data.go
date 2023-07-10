@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/romshark/taskhub/graph"
-	"github.com/romshark/taskhub/graph/model"
+	"github.com/romshark/taskhub/api"
+	"github.com/romshark/taskhub/api/graph"
+	"github.com/romshark/taskhub/api/graph/model"
 	"github.com/romshark/taskhub/slices"
 )
 
@@ -138,9 +139,23 @@ func makeData(r *graph.Resolver) {
 		userCEO_CedricMaude,
 	}
 
-	// Set user IDs
-	for _, u := range r.Users {
-		u.ID = "user_" + graph.MakeID(u.DisplayName)
+	{
+		passwordHasher := new(api.PasswordHasherBcrypt)
+		for _, u := range r.Users {
+			dn := graph.MakeID(u.DisplayName)
+			// Set user IDs
+			u.ID = "user_" + dn
+
+			// Generate emails
+			u.Email = dn + "@company.com"
+
+			// Generate passwords
+			var err error
+			u.PasswordHash, err = passwordHasher.HashPassword([]byte(dn + "_password"))
+			if err != nil {
+				panic(fmt.Errorf("hashing password for user %q", u.ID))
+			}
+		}
 	}
 
 	// Set subordinate->manager relations

@@ -3,7 +3,7 @@ package graph
 import (
 	"strings"
 
-	"github.com/romshark/taskhub/graph/model"
+	"github.com/romshark/taskhub/api/graph/model"
 	"github.com/romshark/taskhub/slices"
 )
 

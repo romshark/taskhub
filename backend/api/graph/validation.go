@@ -1,6 +1,28 @@
 package graph
 
-import "errors"
+import (
+	"errors"
+	"regexp"
+)
+
+var RegexpEmail = regexp.MustCompile(`/.+@.+\..+/i`)
+
+func ValidateEmailAddress(s string) error {
+	if !RegexpEmail.MatchString(s) {
+		return errors.New("malformed email address")
+	}
+	return nil
+}
+
+func ValidateUserPassword(s string) error {
+	if len(s) < 8 {
+		return errors.New("password too short")
+	}
+	if len(s) > 1024 {
+		return errors.New("password too long")
+	}
+	return nil
+}
 
 func ValidateUserDisplayName(s string) error {
 	if len(s) < 4 {

@@ -1,0 +1,27 @@
+type Query {
+  # accessToken generates a JWT access token that is later
+  # expected to be supplied as an "Authorization" bearer token
+  # if the email and password combination is correct.
+  accessToken(email: String!, password: String!): String!
+  task(id: ID!): Task
+  user(id: ID!): User
+  project(id: ID!): Project
+  tasks(
+    filters: TasksFilters
+    order: TasksOrder
+    orderAsc: Boolean! = true
+    limit: Int = 10
+  ): [Task!]!
+  users(
+    filters: UsersFilters
+    order: UsersOrder
+    orderAsc: Boolean! = true
+    limit: Int = 10
+  ): [User!]!
+  projects(
+    filters: ProjectsFilters
+    order: ProjectsOrder
+    orderAsc: Boolean! = true
+    limit: Int = 10
+  ): [Project!]!
+}
