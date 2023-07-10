@@ -12,7 +12,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
       - name: Test
-        run: go test -v -race ./backend/...
+        run: go test -v -race ./...
+        working-directory: ./backend
       - name: Run go vet
         continue-on-error: true
         run: go vet ./backend/...
+        working-directory: ./backend
