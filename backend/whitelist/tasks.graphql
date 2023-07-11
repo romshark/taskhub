@@ -1,0 +1,22 @@
+query (
+  $limit: Int
+  $filters: TasksFilters
+  $order: TasksOrder! = DUE_TIME
+  $orderAsc: Boolean! = false
+) {
+  tasks(limit: $limit, filters: $filters, order: $order, orderAsc: $orderAsc) {
+    id
+    title
+    priority
+    due
+    project {
+      name
+    }
+    reporters {
+      displayName
+    }
+    assignees {
+      displayName
+    }
+  }
+}
