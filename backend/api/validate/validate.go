@@ -1,4 +1,5 @@
-package graph
+// Package validate provides input validation functions.
+package validate
 
 import (
 	"errors"
@@ -7,14 +8,14 @@ import (
 
 var RegexpEmail = regexp.MustCompile(`/.+@.+\..+/i`)
 
-func ValidateEmailAddress(s string) error {
+func EmailAddress(s string) error {
 	if !RegexpEmail.MatchString(s) {
 		return errors.New("malformed email address")
 	}
 	return nil
 }
 
-func ValidateUserPassword(s string) error {
+func UserPassword(s string) error {
 	if len(s) < 8 {
 		return errors.New("password too short")
 	}
@@ -24,7 +25,7 @@ func ValidateUserPassword(s string) error {
 	return nil
 }
 
-func ValidateUserDisplayName(s string) error {
+func UserDisplayName(s string) error {
 	if len(s) < 4 {
 		return errors.New("user displayName too short")
 	}
@@ -34,7 +35,7 @@ func ValidateUserDisplayName(s string) error {
 	return nil
 }
 
-func ValidateUserRole(s string) error {
+func UserRole(s string) error {
 	if len(s) < 4 {
 		return errors.New("user role too short")
 	}
@@ -44,21 +45,21 @@ func ValidateUserRole(s string) error {
 	return nil
 }
 
-func ValidateUserLocation(s string) error {
+func UserLocation(s string) error {
 	if len(s) > 1024 {
 		return errors.New("user location too long")
 	}
 	return nil
 }
 
-func ValidateUserPersonalStatus(s string) error {
+func UserPersonalStatus(s string) error {
 	if len(s) > 1024*64 {
 		return errors.New("user personalStatus too long")
 	}
 	return nil
 }
 
-func ValidateProjectName(s string) error {
+func ProjectName(s string) error {
 	if len(s) < 4 {
 		return errors.New("project name too short")
 	}
@@ -68,28 +69,28 @@ func ValidateProjectName(s string) error {
 	return nil
 }
 
-func ValidateProjectDescription(s string) error {
+func ProjectDescription(s string) error {
 	if len(s) > 1024*64 {
 		return errors.New("project description too long")
 	}
 	return nil
 }
 
-func ValidateProjectSlug(s string) error {
+func ProjectSlug(s string) error {
 	if len(s) > 6 {
 		return errors.New("project slug too long")
 	}
 	return nil
 }
 
-func ValidateTaskTitle(s string) error {
+func TaskTitle(s string) error {
 	if len(s) > 1024 {
 		return errors.New("task title too long")
 	}
 	return nil
 }
 
-func ValidateTaskTag(s string) error {
+func TaskTag(s string) error {
 	if len(s) < 1 {
 		return errors.New("tag too short")
 	}

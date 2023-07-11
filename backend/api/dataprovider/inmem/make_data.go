@@ -1,16 +1,19 @@
-package main
+package inmem
 
 import (
 	"fmt"
 	"time"
 
 	"github.com/romshark/taskhub/api"
-	"github.com/romshark/taskhub/api/graph"
 	"github.com/romshark/taskhub/api/graph/model"
 	"github.com/romshark/taskhub/slices"
 )
 
-func makeData(r *graph.Resolver) {
+// NewFake provides an in-memory data provider
+// initialized with fake data.
+func NewFake() *Inmem {
+	r := new(Inmem)
+
 	// Create users
 	userSWEBE_RyanLindsey := &model.User{
 		DisplayName: "Ryan Lindsey",
@@ -142,7 +145,7 @@ func makeData(r *graph.Resolver) {
 	{
 		passwordHasher := new(api.PasswordHasherBcrypt)
 		for _, u := range r.Users {
-			dn := graph.MakeID(u.DisplayName)
+			dn := makeID(u.DisplayName)
 			// Set user IDs
 			u.ID = "user_" + dn
 
@@ -216,7 +219,7 @@ func makeData(r *graph.Resolver) {
 
 	// Set project IDs
 	for _, p := range r.Projects {
-		p.ID = "project_" + graph.MakeID(p.Name)
+		p.ID = "project_" + makeID(p.Name)
 	}
 
 	const (
@@ -430,8 +433,10 @@ func makeData(r *graph.Resolver) {
 
 	for i, t := range r.Tasks {
 		// Set task IDs
-		t.ID = fmt.Sprintf("task_%s_%d", graph.MakeID(t.Project.Slug), i)
+		t.ID = fmt.Sprintf("task_%s_%d", makeID(t.Project.Slug), i)
 	}
+
+	return r
 }
 
 func ptr[T any](v T) *T { return &v }

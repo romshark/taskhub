@@ -35,8 +35,8 @@ type Mutation {
     tags: [String!]
     assignees: [ID!]
     reporters: [ID!]
-    blocks: [ID!]!
-    relatesTo: [ID!]!
+    blocks: [ID!]
+    relatesTo: [ID!]
   ): Task!
 
   updateTask(

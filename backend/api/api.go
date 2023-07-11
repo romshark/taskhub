@@ -1,3 +1,4 @@
+// Package api provides the GraphQL API server.
 package api
 
 import (
@@ -6,14 +7,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/romshark/taskhub/api/auth"
+	"github.com/romshark/taskhub/api/dataprovider"
 	"github.com/romshark/taskhub/api/graph"
-	"github.com/romshark/taskhub/api/graph/auth"
-	"github.com/vektah/gqlparser/v2/ast"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -54,41 +55,30 @@ type TimeProviderLive struct{}
 
 func (p *TimeProviderLive) Now() time.Time { return time.Now() }
 
-func NewServer(jwtSecret []byte, onResolver func(*graph.Resolver)) http.Handler {
-	gqlResolver := &graph.Resolver{
-		JWTGenerator:   auth.NewJWTGenerator(jwtSecret),
-		PasswordHasher: NewPasswordHasherBcrypt(0),
-		TimeProvider:   new(TimeProviderLive),
-	}
-	onResolver(gqlResolver)
+func NewServer(jwtSecret []byte, dataProvider dataprovider.DataProvider) http.Handler {
+	gqlResolver := graph.NewResolver(
+		dataProvider,
+		auth.NewJWTGenerator(jwtSecret),
+		NewPasswordHasherBcrypt(0),
+		new(TimeProviderLive),
+	)
+	conf := graph.Config{Resolvers: gqlResolver}
+	srv := handler.NewDefaultServer(graph.NewExecutableSchema(conf))
 
-	srv := handler.NewDefaultServer(graph.NewExecutableSchema(
-		graph.Config{Resolvers: gqlResolver},
-	))
+	srv.AddTransport(&transport.Websocket{})
 
-	{
-		// This middleware synchronizes concurrent access to the
-		// in-memory state of the world of the resolver
-		// and logs incoming operations.
-		var lock sync.RWMutex
-		srv.AroundOperations(func(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
-			start := time.Now()
-			requestContext := graphql.GetOperationContext(ctx)
-			switch requestContext.Operation.Operation {
-			case ast.Query:
-				lock.RLock()
-				defer lock.RUnlock()
-			case ast.Mutation, ast.Subscription:
-				lock.Lock()
-				defer lock.Unlock()
-			}
-			defer func() {
-				took := time.Since(start)
-				log.Print("handled ", requestContext.Operation.Operation, " in ", took)
-			}()
-			return next(ctx)
-		})
-	}
+	// Define middleware to log incoming operations.
+	srv.AroundOperations(func(
+		ctx context.Context, next graphql.OperationHandler,
+	) graphql.ResponseHandler {
+		start := time.Now()
+		requestContext := graphql.GetOperationContext(ctx)
+		defer func() {
+			took := time.Since(start)
+			log.Print("handled ", requestContext.Operation.Operation, " in ", took)
+		}()
+		return next(ctx)
+	})
 
 	return auth.NewJWTMiddleware(jwtSecret)(srv)
 }

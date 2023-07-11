@@ -6,55 +6,30 @@ package graph
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/romshark/taskhub/api/graph/auth"
+	"github.com/romshark/taskhub/api/auth"
 	"github.com/romshark/taskhub/api/graph/model"
-	"github.com/romshark/taskhub/slices"
+	"github.com/romshark/taskhub/api/validate"
 )
 
 // CreateUser is the resolver for the createUser field.
 func (r *mutationResolver) CreateUser(ctx context.Context, email string, password string, displayName string, role string, location string, manager *string, subordinates []string) (*model.User, error) {
-	for _, u := range r.Resolver.Users {
-		if u.DisplayName == displayName {
-			return nil, errors.New("non-unique displayName")
-		}
-		if u.Email == email {
-			return nil, errors.New("non-unique email")
-		}
-	}
-	if err := ValidateEmailAddress(email); err != nil {
+	if err := validate.EmailAddress(email); err != nil {
 		return nil, err
 	}
-	if err := ValidateUserPassword(password); err != nil {
+	if err := validate.UserPassword(password); err != nil {
 		return nil, err
 	}
-	if err := ValidateUserDisplayName(displayName); err != nil {
+	if err := validate.UserDisplayName(displayName); err != nil {
 		return nil, err
 	}
-	if err := ValidateUserRole(role); err != nil {
+	if err := validate.UserRole(role); err != nil {
 		return nil, err
 	}
-	if err := ValidateUserLocation(location); err != nil {
+	if err := validate.UserLocation(location); err != nil {
 		return nil, err
-	}
-
-	var managerUser *model.User
-	if manager != nil {
-		managerUser = UserByID(r.Resolver, *manager)
-		if managerUser == nil {
-			return nil, fmt.Errorf("manager user %q not found", *manager)
-		}
-	}
-
-	var subordinateUsers []*model.User
-	for _, s := range subordinates {
-		u := UserByID(r.Resolver, s)
-		if u == nil {
-			return nil, fmt.Errorf("subordinate user %q not found", s)
-		}
 	}
 
 	passwordHash, err := r.Resolver.PasswordHasher.HashPassword([]byte(password))
@@ -62,97 +37,47 @@ func (r *mutationResolver) CreateUser(ctx context.Context, email string, passwor
 		return nil, fmt.Errorf("hashing password: %w", err)
 	}
 
-	newUser := &model.User{
-		ID:           "user_" + MakeID(displayName),
-		Email:        email,
-		DisplayName:  displayName,
-		Role:         role,
-		Location:     location,
-		Manager:      managerUser,
-		Subordinates: subordinateUsers,
-		PasswordHash: passwordHash,
-	}
-	r.Resolver.Users = append(r.Resolver.Users, newUser)
-	return newUser, nil
+	return r.DataProvider.CreateUser(
+		ctx, email, passwordHash, displayName, role,
+		location, manager, subordinates,
+	)
 }
 
 // UpdateUser is the resolver for the updateUser field.
 func (r *mutationResolver) UpdateUser(ctx context.Context, id string, email string, displayName string, role string, location string, personalStatus *string, manager *string, subordinates []string) (*model.User, error) {
-	if err := auth.RequireAuthenticated(ctx); err != nil {
-		return nil, err
-	}
-
-	user := UserByID(r.Resolver, id)
-	if user == nil {
-		return nil, fmt.Errorf("user %q not found", id)
-	}
-
 	if err := auth.RequireOwner(ctx, id); err != nil {
 		return nil, err
 	}
-
-	for _, u := range r.Resolver.Users {
-		if u.DisplayName == displayName {
-			return nil, errors.New("non-unique displayName")
-		}
-		if u.Email == email {
-			return nil, errors.New("non-unique email")
-		}
-	}
-	if err := ValidateEmailAddress(email); err != nil {
+	if err := validate.EmailAddress(email); err != nil {
 		return nil, err
 	}
-	if err := ValidateUserDisplayName(displayName); err != nil {
+	if err := validate.UserDisplayName(displayName); err != nil {
 		return nil, err
 	}
-	if err := ValidateUserRole(role); err != nil {
+	if err := validate.UserRole(role); err != nil {
 		return nil, err
 	}
-	if err := ValidateUserLocation(location); err != nil {
+	if err := validate.UserLocation(location); err != nil {
 		return nil, err
 	}
 
-	var personalStatusText string
 	if personalStatus != nil {
-		personalStatusText = *personalStatus
-		err := ValidateUserPersonalStatus(personalStatusText)
-		if err != nil {
+		if err := validate.UserPersonalStatus(*personalStatus); err != nil {
 			return nil, err
 		}
 	}
 
-	var managerUser *model.User
-	if manager != nil {
-		managerUser = UserByID(r.Resolver, *manager)
-		if managerUser == nil {
-			return nil, fmt.Errorf("manager user %q not found", *manager)
-		}
-		if managerUser == user {
-			return nil, errors.New("user references itself as manager")
-		}
-	}
-
-	var subordinateUsers []*model.User
-	for _, s := range subordinates {
-		u := UserByID(r.Resolver, s)
-		if u == nil {
-			return nil, fmt.Errorf("subordinate user %q not found", s)
-		}
-		if u == user {
-			return nil, errors.New("user references itself as subordinate")
-		}
-		subordinateUsers = slices.AppendUnique(subordinateUsers, u)
-	}
-
-	user.Email = email
-	user.DisplayName = displayName
-	user.Role = role
-	user.Location = location
-	user.PersonalStatus = personalStatusText
-	user.Manager = managerUser
-	user.Subordinates = subordinateUsers
-
-	return user, nil
+	return r.DataProvider.UpdateUser(
+		ctx,
+		id,
+		email,
+		displayName,
+		role,
+		location,
+		personalStatus,
+		manager,
+		subordinates,
+	)
 }
 
 // CreateTask is the resolver for the createTask field.
@@ -160,78 +85,36 @@ func (r *mutationResolver) CreateTask(ctx context.Context, title string, project
 	if err := auth.RequireAuthenticated(ctx); err != nil {
 		return nil, err
 	}
-
-	for _, t := range r.Resolver.Tasks {
-		if t.Title == title {
-			return nil, errors.New("non-unique title")
-		}
-	}
-	if err := ValidateTaskTitle(title); err != nil {
+	if err := validate.TaskTitle(title); err != nil {
 		return nil, err
 	}
 	for _, t := range tags {
-		if err := ValidateTaskTag(t); err != nil {
+		if err := validate.TaskTag(t); err != nil {
 			return nil, err
 		}
 	}
 
-	assignedProject := ProjectByID(r.Resolver, project)
-	if assignedProject == nil {
-		return nil, fmt.Errorf("project %q not found", project)
+	newTask, err := r.DataProvider.CreateTask(
+		ctx,
+		r.TimeProvider.Now(),
+		title,
+		project,
+		status,
+		priority,
+		description,
+		due,
+		tags,
+		assignees,
+		reporters,
+		blocks,
+		relatesTo,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	var usersAssignees []*model.User
-	for _, id := range assignees {
-		user := UserByID(r.Resolver, id)
-		if user == nil {
-			return nil, fmt.Errorf("assignee user %q not found", id)
-		}
-		usersAssignees = slices.AppendUnique(usersAssignees, user)
-	}
+	go r.broadcastTaskUpsert.Notify(context.Background(), newTask)
 
-	var usersReporters []*model.User
-	for _, id := range assignees {
-		u := UserByID(r.Resolver, id)
-		if u == nil {
-			return nil, fmt.Errorf("reporter user %q not found", id)
-		}
-		usersReporters = slices.AppendUnique(usersReporters, u)
-	}
-
-	var blocksTasks []*model.Task
-	for _, id := range blocks {
-		t := TaskByID(r.Resolver, id)
-		if t == nil {
-			return nil, fmt.Errorf("blocked task %q not found", id)
-		}
-		blocksTasks = slices.AppendUnique(blocksTasks, t)
-	}
-
-	var relatesToTasks []*model.Task
-	for _, id := range relatesTo {
-		t := TaskByID(r.Resolver, id)
-		if t == nil {
-			return nil, fmt.Errorf("related task %q not found", id)
-		}
-		relatesToTasks = slices.AppendUnique(relatesToTasks, t)
-	}
-
-	newTask := &model.Task{
-		ID:          "task_" + MakeID(title),
-		Title:       title,
-		Description: description,
-		Priority:    priority,
-		Status:      status,
-		Creation:    r.Resolver.TimeProvider.Now(),
-		Due:         due,
-		Tags:        tags,
-		Project:     assignedProject,
-		Assignees:   usersAssignees,
-		Reporters:   usersReporters,
-		RelatesTo:   relatesToTasks,
-		Blocks:      blocksTasks,
-	}
-	r.Tasks = append(r.Tasks, newTask)
 	return newTask, nil
 }
 
@@ -240,92 +123,37 @@ func (r *mutationResolver) UpdateTask(ctx context.Context, id string, title stri
 	if err := auth.RequireAuthenticated(ctx); err != nil {
 		return nil, err
 	}
-
-	task := TaskByID(r.Resolver, id)
-	if task == nil {
-		return nil, fmt.Errorf("task %q not found", id)
-	}
-
-	for _, t := range r.Resolver.Tasks {
-		if t.Title == title {
-			return nil, errors.New("non-unique title")
-		}
-	}
-	if err := ValidateTaskTitle(title); err != nil {
+	if err := validate.TaskTitle(title); err != nil {
 		return nil, err
 	}
 	for _, t := range tags {
-		if err := ValidateTaskTag(t); err != nil {
+		if err := validate.TaskTag(t); err != nil {
 			return nil, err
 		}
 	}
 
-	var assignedProject *model.Project
-	for _, p := range r.Resolver.Projects {
-		if p.ID == project {
-			assignedProject = p
-			break
-		}
-	}
-	if assignedProject == nil {
-		return nil, fmt.Errorf("project %q not found", project)
-	}
-
-	var usersAssignees []*model.User
-	for _, id := range assignees {
-		user := UserByID(r.Resolver, id)
-		if user == nil {
-			return nil, fmt.Errorf("assignee user %q not found", id)
-		}
-		usersAssignees = slices.AppendUnique(usersAssignees, user)
-	}
-
-	var usersReporters []*model.User
-	for _, id := range assignees {
-		u := UserByID(r.Resolver, id)
-		if u == nil {
-			return nil, fmt.Errorf("reporter user %q not found", id)
-		}
-		usersReporters = slices.AppendUnique(usersReporters, u)
+	updated, err := r.DataProvider.UpdateTask(
+		ctx,
+		id,
+		title,
+		description,
+		status,
+		priority,
+		due,
+		tags,
+		project,
+		assignees,
+		reporters,
+		blocks,
+		relatesTo,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	var blocksTasks []*model.Task
-	for _, id := range blocks {
-		t := TaskByID(r.Resolver, id)
-		if t == nil {
-			return nil, fmt.Errorf("blocked task %q not found", id)
-		}
-		if t == task {
-			return nil, errors.New("task references itself as blocker")
-		}
-		blocksTasks = slices.AppendUnique(blocksTasks, t)
-	}
+	go r.broadcastTaskUpsert.Notify(context.Background(), updated)
 
-	var relatesToTasks []*model.Task
-	for _, id := range relatesTo {
-		t := TaskByID(r.Resolver, id)
-		if t == nil {
-			return nil, fmt.Errorf("related task %q not found", id)
-		}
-		if t == task {
-			return nil, errors.New("task references itself as related")
-		}
-		relatesToTasks = slices.AppendUnique(relatesToTasks, t)
-	}
-
-	task.Status = status
-	task.Priority = priority
-	task.Description = description
-	task.Tags = tags
-	task.Due = due
-	task.Reporters = usersReporters
-	task.Title = title
-	task.Project = assignedProject
-	task.Assignees = usersAssignees
-	task.Blocks = blocksTasks
-	task.RelatesTo = relatesToTasks
-
-	return task, nil
+	return updated, nil
 }
 
 // CreateProject is the resolver for the createProject field.
@@ -333,43 +161,30 @@ func (r *mutationResolver) CreateProject(ctx context.Context, name string, descr
 	if err := auth.RequireAuthenticated(ctx); err != nil {
 		return nil, err
 	}
-
-	for _, p := range r.Resolver.Projects {
-		if p.Name == name {
-			return nil, errors.New("non-unique project name")
-		}
-		if p.Slug == slug {
-			return nil, errors.New("non-unique project slug")
-		}
-	}
-
-	if err := ValidateProjectName(name); err != nil {
+	if err := validate.ProjectName(name); err != nil {
 		return nil, err
 	}
-	if err := ValidateProjectDescription(description); err != nil {
+	if err := validate.ProjectDescription(description); err != nil {
 		return nil, err
 	}
-	if err := ValidateProjectSlug(slug); err != nil {
+	if err := validate.ProjectSlug(slug); err != nil {
 		return nil, err
 	}
 
-	var ownerUsers []*model.User
-	for _, id := range owners {
-		u := UserByID(r.Resolver, id)
-		if u == nil {
-			return nil, fmt.Errorf("owner user %q not found", id)
-		}
-		ownerUsers = slices.AppendUnique(ownerUsers, u)
+	newProject, err := r.DataProvider.CreateProject(
+		ctx,
+		r.TimeProvider.Now(),
+		name,
+		description,
+		slug,
+		owners,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	newProject := &model.Project{
-		ID:          "project_" + MakeID(name),
-		Name:        name,
-		Description: description,
-		Slug:        slug,
-		Creation:    r.Resolver.TimeProvider.Now(),
-		Owners:      ownerUsers,
-	}
+	go r.broadcastProjectUpsert.Notify(context.Background(), newProject)
+
 	return newProject, nil
 }
 
@@ -378,49 +193,31 @@ func (r *mutationResolver) UpdateProject(ctx context.Context, id string, name st
 	if err := auth.RequireAuthenticated(ctx); err != nil {
 		return nil, err
 	}
-
-	project := ProjectByID(r.Resolver, id)
-	if project == nil {
-		return nil, fmt.Errorf("project %q not found", id)
-	}
-
-	for _, p := range r.Resolver.Projects {
-		if p.Name == name {
-			return nil, errors.New("non-unique project name")
-		}
-		if p.Slug == slug {
-			return nil, errors.New("non-unique project slug")
-		}
-	}
-
-	if err := ValidateProjectName(name); err != nil {
+	if err := validate.ProjectName(name); err != nil {
 		return nil, err
 	}
-	if err := ValidateProjectDescription(description); err != nil {
+	if err := validate.ProjectDescription(description); err != nil {
 		return nil, err
 	}
-	if err := ValidateProjectSlug(slug); err != nil {
+	if err := validate.ProjectSlug(slug); err != nil {
 		return nil, err
 	}
 
-	var ownerUsers []*model.User
-	for _, id := range owners {
-		u := UserByID(r.Resolver, id)
-		if u == nil {
-			return nil, fmt.Errorf("owner user %q not found", id)
-		}
-		ownerUsers = slices.AppendUnique(ownerUsers, u)
+	updated, err := r.DataProvider.UpdateProject(
+		ctx,
+		id,
+		name,
+		description,
+		slug,
+		owners,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	newProject := &model.Project{
-		ID:          "project_" + MakeID(name),
-		Name:        name,
-		Description: description,
-		Slug:        slug,
-		Creation:    r.Resolver.TimeProvider.Now(),
-		Owners:      ownerUsers,
-	}
-	return newProject, nil
+	go r.broadcastProjectUpsert.Notify(context.Background(), updated)
+
+	return updated, nil
 }
 
 // Mutation returns MutationResolver implementation.

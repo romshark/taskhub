@@ -1,0 +1,7 @@
+type Subscription {
+  # projectUpsert triggers when a task is either created or updated
+  taskUpsert: Task!
+
+  # projectUpsert triggers when a project is either created or updated
+  projectUpsert: Project!
+}

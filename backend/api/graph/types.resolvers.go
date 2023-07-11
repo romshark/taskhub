@@ -8,114 +8,41 @@ import (
 	"context"
 
 	"github.com/romshark/taskhub/api/graph/model"
-	"github.com/romshark/taskhub/slices"
 )
 
 // Tasks is the resolver for the tasks field.
 func (r *projectResolver) Tasks(ctx context.Context, obj *model.Project) ([]*model.Task, error) {
-	tasks := []*model.Task{}
-	for _, t := range r.Resolver.Tasks {
-		if t.Project == obj {
-			tasks = append(tasks, t)
-		}
-	}
-	return tasks, nil
+	return r.DataProvider.GetTasksByProject(ctx, obj.ID)
 }
 
 // Members is the resolver for the members field.
 func (r *projectResolver) Members(ctx context.Context, obj *model.Project) ([]*model.User, error) {
-	m := []*model.User{}
-	for _, t := range r.Resolver.Tasks {
-		if t.Project != obj {
-			continue
-		}
-		for _, u := range t.Assignees {
-			m = slices.AppendUnique(m, u)
-		}
-		for _, u := range t.Reporters {
-			m = slices.AppendUnique(m, u)
-		}
-	}
-	return m, nil
+	return r.DataProvider.GetProjectMembers(ctx, obj.ID)
 }
 
 // IsBlockedBy is the resolver for the isBlockedBy field.
 func (r *taskResolver) IsBlockedBy(ctx context.Context, obj *model.Task) ([]*model.Task, error) {
-	blockedBy := []*model.Task{}
-	for _, t := range r.Resolver.Tasks {
-		if t == obj {
-			continue
-		}
-		for _, tb := range t.Blocks {
-			if tb == obj {
-				blockedBy = slices.AppendUnique(blockedBy, t)
-			}
-		}
-	}
-	return blockedBy, nil
+	return r.DataProvider.GetBlockingTasks(ctx, obj.ID)
 }
 
 // RelatesTo is the resolver for the relatesTo field.
 func (r *taskResolver) RelatesTo(ctx context.Context, obj *model.Task) ([]*model.Task, error) {
-	relatesTo := []*model.Task{}
-	relatesTo = append(relatesTo, obj.RelatesTo...)
-	for _, t := range r.Resolver.Tasks {
-		if t == obj {
-			continue
-		}
-		for _, tr := range t.RelatesTo {
-			if tr == obj {
-				relatesTo = slices.AppendUnique(relatesTo, t)
-			}
-		}
-	}
-	return relatesTo, nil
+	return r.DataProvider.GetRelatedTasks(ctx, obj.ID)
 }
 
 // Projects is the resolver for the projects field.
 func (r *userResolver) Projects(ctx context.Context, obj *model.User) ([]*model.Project, error) {
-	p := []*model.Project{}
-	for _, t := range r.Resolver.Tasks {
-		for _, u := range t.Assignees {
-			if u == obj {
-				p = slices.AppendUnique(p, t.Project)
-				break
-			}
-		}
-		for _, u := range t.Reporters {
-			if u == obj {
-				p = slices.AppendUnique(p, t.Project)
-				break
-			}
-		}
-	}
-	return p, nil
+	return r.DataProvider.GetUserProjects(ctx, obj.ID)
 }
 
 // TasksAssigned is the resolver for the tasksAssigned field.
 func (r *userResolver) TasksAssigned(ctx context.Context, obj *model.User) ([]*model.Task, error) {
-	tasks := []*model.Task{}
-	for _, t := range r.Tasks {
-		for _, r := range t.Assignees {
-			if r == obj {
-				tasks = append(tasks, t)
-			}
-		}
-	}
-	return tasks, nil
+	return r.DataProvider.GetTasksAssignedToUser(ctx, obj.ID)
 }
 
 // TasksReported is the resolver for the tasksReported field.
 func (r *userResolver) TasksReported(ctx context.Context, obj *model.User) ([]*model.Task, error) {
-	tasks := []*model.Task{}
-	for _, t := range r.Tasks {
-		for _, r := range t.Reporters {
-			if r == obj {
-				tasks = append(tasks, t)
-			}
-		}
-	}
-	return tasks, nil
+	return r.DataProvider.GetTasksReportedByUser(ctx, obj.ID)
 }
 
 // Project returns ProjectResolver implementation.
@@ -127,8 +54,6 @@ func (r *Resolver) Task() TaskResolver { return &taskResolver{r} }
 // User returns UserResolver implementation.
 func (r *Resolver) User() UserResolver { return &userResolver{r} }
 
-type (
-	projectResolver struct{ *Resolver }
-	taskResolver    struct{ *Resolver }
-	userResolver    struct{ *Resolver }
-)
+type projectResolver struct{ *Resolver }
+type taskResolver struct{ *Resolver }
+type userResolver struct{ *Resolver }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/romshark/taskhub/api"
-	"github.com/romshark/taskhub/api/graph"
+	"github.com/romshark/taskhub/api/dataprovider/inmem"
 )
 
 const defaultPort = "8080"
@@ -23,9 +23,9 @@ func main() {
 		return
 	}
 
-	apiServer := api.NewServer([]byte(envJWTSecret), func(r *graph.Resolver) {
-		makeData(r)
-	})
+	inmemDataProvider := inmem.NewFake()
+
+	apiServer := api.NewServer([]byte(envJWTSecret), inmemDataProvider)
 
 	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	http.Handle("/query", apiServer)

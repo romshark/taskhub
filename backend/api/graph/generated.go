@@ -8,6 +8,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -41,6 +42,7 @@ type ResolverRoot interface {
 	Mutation() MutationResolver
 	Project() ProjectResolver
 	Query() QueryResolver
+	Subscription() SubscriptionResolver
 	Task() TaskResolver
 	User() UserResolver
 }
@@ -77,6 +79,11 @@ type ComplexityRoot struct {
 		Tasks       func(childComplexity int, filters *model.TasksFilters, order *model.TasksOrder, orderAsc bool, limit *int) int
 		User        func(childComplexity int, id string) int
 		Users       func(childComplexity int, filters *model.UsersFilters, order *model.UsersOrder, orderAsc bool, limit *int) int
+	}
+
+	Subscription struct {
+		ProjectUpsert func(childComplexity int) int
+		TaskUpsert    func(childComplexity int) int
 	}
 
 	Task struct {
@@ -132,6 +139,10 @@ type QueryResolver interface {
 	Tasks(ctx context.Context, filters *model.TasksFilters, order *model.TasksOrder, orderAsc bool, limit *int) ([]*model.Task, error)
 	Users(ctx context.Context, filters *model.UsersFilters, order *model.UsersOrder, orderAsc bool, limit *int) ([]*model.User, error)
 	Projects(ctx context.Context, filters *model.ProjectsFilters, order *model.ProjectsOrder, orderAsc bool, limit *int) ([]*model.Project, error)
+}
+type SubscriptionResolver interface {
+	TaskUpsert(ctx context.Context) (<-chan *model.Task, error)
+	ProjectUpsert(ctx context.Context) (<-chan *model.Project, error)
 }
 type TaskResolver interface {
 	IsBlockedBy(ctx context.Context, obj *model.Task) ([]*model.Task, error)
@@ -371,6 +382,20 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Query.Users(childComplexity, args["filters"].(*model.UsersFilters), args["order"].(*model.UsersOrder), args["orderAsc"].(bool), args["limit"].(*int)), true
 
+	case "Subscription.projectUpsert":
+		if e.complexity.Subscription.ProjectUpsert == nil {
+			break
+		}
+
+		return e.complexity.Subscription.ProjectUpsert(childComplexity), true
+
+	case "Subscription.taskUpsert":
+		if e.complexity.Subscription.TaskUpsert == nil {
+			break
+		}
+
+		return e.complexity.Subscription.TaskUpsert(childComplexity), true
+
 	case "Task.assignees":
 		if e.complexity.Task.Assignees == nil {
 			break
@@ -606,6 +631,23 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 				Data: buf.Bytes(),
 			}
 		}
+	case ast.Subscription:
+		next := ec._Subscription(ctx, rc.Operation.SelectionSet)
+
+		var buf bytes.Buffer
+		return func(ctx context.Context) *graphql.Response {
+			buf.Reset()
+			data := next(ctx)
+
+			if data == nil {
+				return nil
+			}
+			data.MarshalGQL(&buf)
+
+			return &graphql.Response{
+				Data: buf.Bytes(),
+			}
+		}
 
 	default:
 		return graphql.OneShot(graphql.ErrorResponse(ctx, "unsupported GraphQL operation"))
@@ -653,7 +695,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 	return introspection.WrapTypeFromDef(parsedSchema, parsedSchema.Types[name]), nil
 }
 
-//go:embed "mutations.graphqls" "query.graphqls" "types.graphqls"
+//go:embed "mutations.graphqls" "query.graphqls" "subscriptions.graphqls" "types.graphqls"
 var sourcesFS embed.FS
 
 func sourceData(filename string) string {
@@ -667,6 +709,7 @@ func sourceData(filename string) string {
 var sources = []*ast.Source{
 	{Name: "mutations.graphqls", Input: sourceData("mutations.graphqls"), BuiltIn: false},
 	{Name: "query.graphqls", Input: sourceData("query.graphqls"), BuiltIn: false},
+	{Name: "subscriptions.graphqls", Input: sourceData("subscriptions.graphqls"), BuiltIn: false},
 	{Name: "types.graphqls", Input: sourceData("types.graphqls"), BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
@@ -804,7 +847,7 @@ func (ec *executionContext) field_Mutation_createTask_args(ctx context.Context, 
 	var arg9 []string
 	if tmp, ok := rawArgs["blocks"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("blocks"))
-		arg9, err = ec.unmarshalNID2ᚕstringᚄ(ctx, tmp)
+		arg9, err = ec.unmarshalOID2ᚕstringᚄ(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -813,7 +856,7 @@ func (ec *executionContext) field_Mutation_createTask_args(ctx context.Context, 
 	var arg10 []string
 	if tmp, ok := rawArgs["relatesTo"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("relatesTo"))
-		arg10, err = ec.unmarshalNID2ᚕstringᚄ(ctx, tmp)
+		arg10, err = ec.unmarshalOID2ᚕstringᚄ(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -2927,6 +2970,170 @@ func (ec *executionContext) fieldContext_Query___schema(ctx context.Context, fie
 				return ec.fieldContext___Schema_directives(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type __Schema", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_taskUpsert(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	fc, err := ec.fieldContext_Subscription_taskUpsert(ctx, field)
+	if err != nil {
+		return nil
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().TaskUpsert(rctx)
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return nil
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return nil
+	}
+	return func(ctx context.Context) graphql.Marshaler {
+		select {
+		case res, ok := <-resTmp.(<-chan *model.Task):
+			if !ok {
+				return nil
+			}
+			return graphql.WriterFunc(func(w io.Writer) {
+				w.Write([]byte{'{'})
+				graphql.MarshalString(field.Alias).MarshalGQL(w)
+				w.Write([]byte{':'})
+				ec.marshalNTask2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐTask(ctx, field.Selections, res).MarshalGQL(w)
+				w.Write([]byte{'}'})
+			})
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (ec *executionContext) fieldContext_Subscription_taskUpsert(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Task_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Task_title(ctx, field)
+			case "description":
+				return ec.fieldContext_Task_description(ctx, field)
+			case "priority":
+				return ec.fieldContext_Task_priority(ctx, field)
+			case "status":
+				return ec.fieldContext_Task_status(ctx, field)
+			case "creation":
+				return ec.fieldContext_Task_creation(ctx, field)
+			case "due":
+				return ec.fieldContext_Task_due(ctx, field)
+			case "tags":
+				return ec.fieldContext_Task_tags(ctx, field)
+			case "project":
+				return ec.fieldContext_Task_project(ctx, field)
+			case "assignees":
+				return ec.fieldContext_Task_assignees(ctx, field)
+			case "reporters":
+				return ec.fieldContext_Task_reporters(ctx, field)
+			case "isBlockedBy":
+				return ec.fieldContext_Task_isBlockedBy(ctx, field)
+			case "blocks":
+				return ec.fieldContext_Task_blocks(ctx, field)
+			case "relatesTo":
+				return ec.fieldContext_Task_relatesTo(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Task", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_projectUpsert(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	fc, err := ec.fieldContext_Subscription_projectUpsert(ctx, field)
+	if err != nil {
+		return nil
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = nil
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Subscription().ProjectUpsert(rctx)
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return nil
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return nil
+	}
+	return func(ctx context.Context) graphql.Marshaler {
+		select {
+		case res, ok := <-resTmp.(<-chan *model.Project):
+			if !ok {
+				return nil
+			}
+			return graphql.WriterFunc(func(w io.Writer) {
+				w.Write([]byte{'{'})
+				graphql.MarshalString(field.Alias).MarshalGQL(w)
+				w.Write([]byte{':'})
+				ec.marshalNProject2ᚖgithubᚗcomᚋromsharkᚋtaskhubᚋapiᚋgraphᚋmodelᚐProject(ctx, field.Selections, res).MarshalGQL(w)
+				w.Write([]byte{'}'})
+			})
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (ec *executionContext) fieldContext_Subscription_projectUpsert(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "slug":
+				return ec.fieldContext_Project_slug(ctx, field)
+			case "tasks":
+				return ec.fieldContext_Project_tasks(ctx, field)
+			case "creation":
+				return ec.fieldContext_Project_creation(ctx, field)
+			case "owners":
+				return ec.fieldContext_Project_owners(ctx, field)
+			case "members":
+				return ec.fieldContext_Project_members(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
 	}
 	return fc, nil
@@ -6658,6 +6865,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	}
 
 	return out
+}
+
+var subscriptionImplementors = []string{"Subscription"}
+
+func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, subscriptionImplementors)
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Object: "Subscription",
+	})
+	if len(fields) != 1 {
+		ec.Errorf(ctx, "must subscribe to exactly one stream")
+		return nil
+	}
+
+	switch fields[0].Name {
+	case "taskUpsert":
+		return ec._Subscription_taskUpsert(ctx, fields[0])
+	case "projectUpsert":
+		return ec._Subscription_projectUpsert(ctx, fields[0])
+	default:
+		panic("unknown field " + strconv.Quote(fields[0].Name))
+	}
 }
 
 var taskImplementors = []string{"Task"}

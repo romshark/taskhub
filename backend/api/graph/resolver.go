@@ -1,8 +1,11 @@
 package graph
 
 import (
+	"context"
 	"time"
 
+	"github.com/romshark/taskhub/api/broadcast"
+	"github.com/romshark/taskhub/api/dataprovider"
 	"github.com/romshark/taskhub/api/graph/model"
 )
 
@@ -13,12 +16,34 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 type Resolver struct {
-	Users          []*model.User
-	Tasks          []*model.Task
-	Projects       []*model.Project
+	DataProvider   dataprovider.DataProvider
 	JWTGenerator   JWTGenerator
 	PasswordHasher PasswordHasher
 	TimeProvider   TimeProvider
+
+	broadcastTaskUpsert    *broadcast.Broadcast[*model.Task]
+	broadcastProjectUpsert *broadcast.Broadcast[*model.Project]
+}
+
+func NewResolver(
+	dataProvider dataprovider.DataProvider,
+	jWTGenerator JWTGenerator,
+	passwordHasher PasswordHasher,
+	timeProvider TimeProvider,
+) *Resolver {
+	return &Resolver{
+		DataProvider:           dataProvider,
+		JWTGenerator:           jWTGenerator,
+		PasswordHasher:         passwordHasher,
+		TimeProvider:           timeProvider,
+		broadcastTaskUpsert:    broadcast.New[*model.Task](),
+		broadcastProjectUpsert: broadcast.New[*model.Project](),
+	}
+}
+
+type Subscriber[T any] interface {
+	Notify(context.Context, T) error
+	Subscribe(context.Context) (<-chan T, error)
 }
 
 type JWTGenerator interface {
