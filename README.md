@@ -12,3 +12,9 @@ in `DEBUG` mode the server exposes direct querying via `/query` and the
 GraphiQL playground via `/` as well as the whitelisted queries under `/e/`.
 In `PRODUCTION` mode only the whitelisted query endpoints are available
 to make sure clients can't execute arbitrary queries.
+
+# Workflow 
+
+Frontend developers add their queries to `backend/whitelist` to allow their
+frontend application to call the API in production. Backend developers
+are expected to review and control the whitelist.
