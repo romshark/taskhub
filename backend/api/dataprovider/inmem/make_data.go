@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/romshark/taskhub/api"
 	"github.com/romshark/taskhub/api/graph/model"
+	"github.com/romshark/taskhub/api/passhash"
 	"github.com/romshark/taskhub/slices"
 )
 
@@ -143,7 +143,7 @@ func NewFake() *Inmem {
 	}
 
 	{
-		passwordHasher := new(api.PasswordHasherBcrypt)
+		passwordHasher := new(passhash.PasswordHasherBcrypt)
 		for _, u := range r.Users {
 			dn := makeID(u.DisplayName)
 			// Set user IDs
