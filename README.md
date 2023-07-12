@@ -21,7 +21,7 @@ GraphiQL playground via `/` as well as the persisted queries under `/e/`.
 `MODE="PRODUCTION"` will only make the persisted query endpoints available
 making sure clients can't execute arbitrary queries.
 
-# Workflow 
+## Workflow 
 
 Frontend developers add their queries to `backend/persisted_queries` to allow their
 frontend application to call the API in production. Backend developers
