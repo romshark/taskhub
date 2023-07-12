@@ -26,3 +26,20 @@ making sure clients can't execute arbitrary queries.
 Frontend developers add their queries to `backend/persisted_queries` to allow their
 frontend application to call the API in production. Backend developers
 are expected to review and control the persisted queries.
+
+## FAQ
+
+### Why names instead of hashes?
+Usually, in the context of persisted queries, a hash of the query is sent
+instead of a name. This demo uses human-readable names because it makes
+monitoring and rate-limiting easier to configure.
+
+### Why not just use REST/gRPC/etc.?
+The difference between a GraphQL API with a query white-/allowlist
+and a REST API or other RPC-like approaches to API design is that the former
+is less tightly coupled to its consumers.
+REST API endpoints usually need to be implemented and tested manually.
+The maintenance of many such REST endpoints can become very expensive, thus
+their number tends to be limited which can cause under- and overfetching.
+See [howtographql.com - GraphQL is the better REST](https://www.howtographql.com/basics/1-graphql-is-the-better-rest/)
+for more information.
