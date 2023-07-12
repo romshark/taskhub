@@ -1,0 +1,40 @@
+query ($userID: ID!) {
+  user(id: $userID) {
+    id
+    email
+    displayName
+    role
+    location
+    personalStatus
+    manager {
+      id
+      displayName
+    }
+    subordinates {
+      id
+      displayName
+    }
+    projects {
+      id
+      name
+    }
+    tasksAssigned {
+      id
+      title
+      description
+      reporters {
+        id
+        displayName
+      }
+    }
+    tasksReported {
+      id
+      title
+      description
+      assignees {
+        id
+        displayName
+      }
+    }
+  }
+}

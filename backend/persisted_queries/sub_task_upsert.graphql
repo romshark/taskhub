@@ -1,0 +1,11 @@
+subscription {
+  taskUpsert {
+    id
+    title
+    description
+    reporters {
+      id
+      displayName
+    }
+  }
+}

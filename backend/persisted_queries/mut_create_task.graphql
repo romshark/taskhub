@@ -1,0 +1,29 @@
+mutation (
+  $title: String!
+  $projectID: ID!
+  $status: TaskStatus = TODO
+  $taskPriority: TaskPriority = MEDIUM
+  $description: String
+  $due: Time
+  $tags: [String!]
+  $assignees: [ID!]
+  $reporters: [ID!]
+  $blocks: [ID!]
+  $relatesTo: [ID!]
+) {
+  createTask(
+    title: $title
+    project: $projectID
+    status: $status
+    priority: $taskPriority
+    description: $description
+    due: $due
+    tags: $tags
+    assignees: $assignees
+    reporters: $reporters
+    blocks: $blocks
+    relatesTo: $relatesTo
+  ) {
+    id
+  }
+}

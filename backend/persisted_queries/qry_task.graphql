@@ -1,0 +1,34 @@
+query ($taskID: ID!) {
+  task(id: $taskID) {
+    id
+    title
+    description
+    priority
+    status
+    creation
+    due
+    tags
+    project {
+      id
+      name
+    }
+    assignees {
+      id
+      displayName
+    }
+    reporters {
+      id
+      displayName
+    }
+    isBlockedBy {
+      id
+      title
+      description
+    }
+    relatesTo {
+      id
+      title
+      description
+    }
+  }
+}

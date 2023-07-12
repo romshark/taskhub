@@ -196,19 +196,22 @@ func NewFake() *Inmem {
 
 	// Create projects
 	projectCoreMigration := &model.Project{
-		Name:   "Core Migration",
-		Slug:   "CORM",
-		Owners: []*model.User{userPM_AnneWilliams},
+		Name:     "Core Migration",
+		Slug:     "CORM",
+		Owners:   []*model.User{userPM_AnneWilliams},
+		Creation: time.Now().AddDate(0, -1, -2),
 	}
 	projectVendorPlatform := &model.Project{
-		Name:   "Vendor Platform",
-		Slug:   "VENP",
-		Owners: []*model.User{userPM_JamesHunter},
+		Name:     "Vendor Platform",
+		Slug:     "VENP",
+		Owners:   []*model.User{userPM_JamesHunter},
+		Creation: time.Now().AddDate(0, 0, -22),
 	}
 	projectPlatformUpgrade := &model.Project{
-		Name:   "Platform Upgrade",
-		Slug:   "PLUG",
-		Owners: []*model.User{userPM_JamesHunter},
+		Name:     "Platform Upgrade",
+		Slug:     "PLUG",
+		Owners:   []*model.User{userPM_JamesHunter},
+		Creation: time.Now().AddDate(0, 0, -21).Add(4 * time.Second),
 	}
 
 	r.Projects = []*model.Project{

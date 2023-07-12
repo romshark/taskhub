@@ -1,0 +1,33 @@
+query ($projectID: ID!) {
+  project(id: $projectID) {
+    id
+    name
+    description
+    slug
+    creation
+    owners {
+      ...userBasic
+    }
+    members {
+      ...userBasic
+    }
+    tasks {
+      id
+      title
+      description
+      priority
+      due
+      assignees {
+        ...userBasic
+      }
+      reporters {
+        ...userBasic
+      }
+    }
+  }
+}
+
+fragment userBasic on User {
+  id
+  displayName
+}

@@ -4,7 +4,9 @@ go 1.20
 
 require (
 	github.com/99designs/gqlgen v0.17.34
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/oklog/ulid v1.3.1
 	github.com/stretchr/testify v1.8.2
 	github.com/vektah/gqlparser/v2 v2.5.4
 	golang.org/x/crypto v0.11.0

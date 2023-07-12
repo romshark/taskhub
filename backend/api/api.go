@@ -5,24 +5,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
-	"io/fs"
-	"log"
 	"net/http"
-	"net/url"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/romshark/taskhub/api/dataprovider"
+	"github.com/romshark/taskhub/api/gqlpq"
+	"github.com/romshark/taskhub/api/graph"
+	"github.com/romshark/taskhub/api/jwt"
+	"github.com/romshark/taskhub/api/passhash"
+	"github.com/romshark/taskhub/api/reqctx"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
-	"github.com/romshark/taskhub/api/auth"
-	"github.com/romshark/taskhub/api/dataprovider"
-	"github.com/romshark/taskhub/api/graph"
-	"github.com/romshark/taskhub/api/passhash"
+	"golang.org/x/exp/slog"
 )
 
 // TimeProviderLive provides live time.
@@ -45,10 +45,6 @@ func (s *ServerDebug) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.playgroundHandler.ServeHTTP(w, r)
 		return
 	case r.URL.Path == "/query":
-		if r.Method != http.MethodPost {
-			httpNotFound(w)
-			return
-		}
 		s.productionServer.gqlHandler.ServeHTTP(w, r)
 	default:
 		s.productionServer.ServeHTTP(w, r)
@@ -56,25 +52,26 @@ func (s *ServerDebug) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type ServerProduction struct {
-	gqlHandler http.Handler
-	whitelist  GraphQLWhitelist
+	log              *slog.Logger
+	gqlHandler       http.Handler
+	persistedQueries *gqlpq.PersistedQueries
 }
 
 func (s *ServerProduction) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id, ok := strings.CutPrefix(r.URL.Path, "/e/")
+	key, ok := strings.CutPrefix(r.URL.Path, "/e/")
 	if !ok {
 		httpNotFound(w)
 		return
 	}
-	query, ok := s.whitelist[id]
-	if !ok {
+	query := s.persistedQueries.GetQuery(key)
+	if query == "" {
 		httpNotFound(w)
 		return
 	}
 
 	originalBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Print("reading request body: ", err)
+		s.log.Info("reading request body", slog.Any("error", err))
 		return
 	}
 	r.Body.Close()
@@ -109,17 +106,16 @@ const (
 	ModeProduction Mode = 1
 )
 
-type GraphQLWhitelist map[string]string
-
 func NewServer(
+	log *slog.Logger,
 	mode Mode,
 	jwtSecret []byte,
 	dataProvider dataprovider.DataProvider,
-	whitelist GraphQLWhitelist,
+	persistedQueries *gqlpq.PersistedQueries,
 ) (http.Handler, error) {
 	gqlResolver := graph.NewResolver(
 		dataProvider,
-		auth.NewJWTGenerator(jwtSecret),
+		jwt.NewJWTGenerator(jwtSecret),
 		passhash.NewPasswordHasherBcrypt(0),
 		new(TimeProviderLive),
 	)
@@ -127,14 +123,14 @@ func NewServer(
 
 	srv := handler.NewDefaultServer(graph.NewExecutableSchema(conf))
 	srv.AddTransport(&transport.Websocket{})
-	srv.AroundResponses(gqlMiddlewareLogResponses)
+	srv.AroundResponses(newGQLMiddlewareLogResponses(log))
 
-	withJWT := auth.NewJWTMiddleware(jwtSecret)(srv)
-	withStartTime := newMiddlewareSetStartTime(withJWT)
+	withContextMiddleware := newMiddlewareSetRequestContext(srv, log, jwtSecret)
 
 	prodSrv := &ServerProduction{
-		gqlHandler: withStartTime,
-		whitelist:  whitelist,
+		log:              log,
+		gqlHandler:       withContextMiddleware,
+		persistedQueries: persistedQueries,
 	}
 	if mode == ModeDebug {
 		play := playground.Handler("GraphQL Playground", "/query")
@@ -146,30 +142,75 @@ func NewServer(
 	return prodSrv, nil
 }
 
-func gqlMiddlewareLogResponses(
+func newGQLMiddlewareLogResponses(log *slog.Logger) func(
 	ctx context.Context, next graphql.ResponseHandler,
 ) *graphql.Response {
-	requestContext := graphql.GetOperationContext(ctx)
-	start := ctx.Value(ctxKeyStartTime).(time.Time)
-	took := time.Since(start)
-	if requestContext.Operation != nil {
-		log.Print(requestContext.Operation.Operation, "; took ", took)
-	} else {
-		log.Print("invalid request; took: ", took)
+	return func(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
+		requestContext := graphql.GetOperationContext(ctx)
+		reqCtx := reqctx.GetRequestContext(ctx)
+		took := time.Since(reqCtx.Start)
+		if requestContext.Operation != nil {
+			if reqCtx.PersistedQueryName != "" {
+				log.Info(
+					"handled persisted operation",
+					slog.String("requestID", string(reqCtx.RequestID)),
+					slog.String("persistedQueryName", reqCtx.PersistedQueryName),
+					slog.String("type", string(requestContext.Operation.Operation)),
+					slog.String("took", took.String()),
+				)
+			} else {
+				log.Info(
+					"handled operation",
+					slog.String("requestID", string(reqCtx.RequestID)),
+					slog.String("type", string(requestContext.Operation.Operation)),
+					slog.String("took", took.String()),
+				)
+			}
+		} else {
+			log.Info(
+				"handled invalid request",
+				slog.String("took", took.String()),
+			)
+		}
+		return next(ctx)
 	}
-	return next(ctx)
 }
 
-func newMiddlewareSetStartTime(next http.Handler) http.Handler {
+func newMiddlewareSetRequestContext(
+	next http.Handler,
+	log *slog.Logger,
+	jwtSecret []byte,
+) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), ctxKeyStartTime, time.Now())
+		var persistedQueryName string
+		if s, ok := strings.CutPrefix(r.URL.Path, "/e/"); ok {
+			persistedQueryName = s
+		}
+
+		userID, err := jwt.GetUserID(jwtSecret, r, time.Now())
+		switch {
+		case err == nil:
+		case errors.Is(err, jwt.ErrTokenInvalid):
+			http.Error(w, "invalid bearer token", http.StatusUnauthorized)
+			return
+		case errors.Is(err, jwt.ErrTokenExpired):
+			http.Error(w, "expired bearer token", http.StatusUnauthorized)
+			return
+		default:
+			http.Error(
+				w,
+				http.StatusText(http.StatusInternalServerError),
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		ctx := reqctx.WithRequestContext(
+			r.Context(), log, userID, persistedQueryName, time.Now(),
+		)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
-
-type ctxKey int8
-
-var ctxKeyStartTime ctxKey = 1
 
 func httpNotFound(w http.ResponseWriter) {
 	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -199,39 +240,4 @@ func makeQueryWithVars(query string, variablesObjJSON []byte) io.ReadCloser {
 	b.Write(variablesObjJSON)
 	b.WriteString(`}`)
 	return io.NopCloser(b)
-}
-
-const gqlFileExtension = ".graphql"
-
-func ParseWhitelist(filesystem fs.FS, path string) (GraphQLWhitelist, error) {
-	m := make(GraphQLWhitelist)
-	dir, err := fs.ReadDir(filesystem, path)
-	if err != nil {
-		return nil, fmt.Errorf("reading query directory path: %w", err)
-	}
-	for _, o := range dir {
-		if o.IsDir() {
-			continue
-		}
-		n := o.Name()
-		if !strings.HasSuffix(n, gqlFileExtension) {
-			continue
-		}
-		if n != url.PathEscape(n) {
-			return nil, fmt.Errorf("invalid file name (not URL safe): %q", n)
-		}
-		p := filepath.Join(path, n)
-		query, err := fs.ReadFile(filesystem, p)
-		if err != nil {
-			return nil, fmt.Errorf("reading file query %q: %w", p, err)
-		}
-		n, _ = strings.CutSuffix(n, gqlFileExtension)
-		encodedQuery, err := json.Marshal(string(query))
-		if err != nil {
-			return nil, fmt.Errorf("encoding query to JSON string: %w", err)
-		}
-		m[n] = string(encodedQuery)
-	}
-
-	return m, nil
 }
