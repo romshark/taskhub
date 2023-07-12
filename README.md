@@ -41,5 +41,8 @@ is less tightly coupled to its consumers.
 REST API endpoints usually need to be implemented and tested manually.
 The maintenance of many such REST endpoints can become very expensive, thus
 their number tends to be limited which can cause under- and overfetching.
+A GraphQL API with query white-/allowlisting combines both the flexibility
+and loose coupling of GraphQL with the predictability and safety of REST.
+
 See [howtographql.com - GraphQL is the better REST](https://www.howtographql.com/basics/1-graphql-is-the-better-rest/)
 for more information.
