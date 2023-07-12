@@ -1,4 +1,4 @@
-# GraphQL Query Persisted Queries Demo
+# GraphQL Persisted Queries Demo
 
 This tech demo demonstrates how publicly exposed GraphQL APIs can be protected
 from arbitrary queries using persisted queries (white/-allowlisting).
