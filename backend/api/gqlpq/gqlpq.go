@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -26,8 +26,8 @@ const (
 type PersistedQueries struct {
 	schema *ast.Schema
 
-	lock sync.RWMutex
-	list map[string]string
+	list atomic.Value
+	// list map[string]string
 }
 
 // New reads the schema and creates a new GraphQL persisted queries list instance.
@@ -60,40 +60,39 @@ func New(schemaDirPath string) (*PersistedQueries, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading schema: %w", err)
 	}
+	var list atomic.Value
+	list.Store(map[string]string{})
 	return &PersistedQueries{
 		schema: schema,
-		list:   map[string]string{},
+		list:   list,
 	}, nil
 }
 
 // GetQuery returns the query by key, or "" if no query is found.
-// GetQuery acquires a shared lock and is therefore safe for concurrent use.
+// GetQuery is safe for concurrent use.
 func (l *PersistedQueries) GetQuery(key string) string {
-	l.lock.RLock()
-	defer l.lock.RUnlock()
-	return l.list[key]
+	m := l.list.Load().(map[string]string)
+	return m[key]
 }
 
 // Len returns the length of the list.
-// Len acquires a shared lock and is therefore safe for concurrent use.
+// Len is safe for concurrent use.
 func (l *PersistedQueries) Len() int {
-	l.lock.RLock()
-	defer l.lock.RUnlock()
-	return len(l.list)
+	m := l.list.Load().(map[string]string)
+	return len(m)
 }
 
 // ForEach calls fn for every key-query pair stored.
-// ForEach acquires a shared lock and is therefore safe for concurrent use.
+// ForEach is safe for concurrent use.
 func (l *PersistedQueries) ForEach(fn func(key, query string)) {
-	l.lock.RLock()
-	defer l.lock.RUnlock()
-	for k, v := range l.list {
+	m := l.list.Load().(map[string]string)
+	for k, v := range m {
 		fn(k, v)
 	}
 }
 
 // Load loads the persisted queries from dirPath.
-// Load acquires an exlusive lock and is therefore safe for concurrent use.
+// Load swaps the list atomically and is therefore safe for concurrent use.
 func (l *PersistedQueries) Load(dirPath string) error {
 	dir, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -131,16 +130,13 @@ func (l *PersistedQueries) Load(dirPath string) error {
 		newMap[n] = string(encodedQuery)
 	}
 
-	l.lock.Lock()
-	defer l.lock.Unlock()
-	l.list = newMap
-
+	l.list.Swap(newMap)
 	return nil
 }
 
 // Watch starts listening to changes on dirPath
 // and automatically reloads the persisted queries.
-// Watch acquires an exlusive lock and is therefore safe for concurrent use.
+// Watch is safe for concurrent use.
 // onReloaded is invoked after a reload.
 func (l *PersistedQueries) Watch(
 	ctx context.Context,
